@@ -5,9 +5,17 @@ const api = axios.create({
 })
 
 api.interceptors.request.use(config => {
-  const token = import.meta.env.VITE_API_TOKEN
+  const token = localStorage.getItem('auth_token')
   if(token){ config.headers['Authorization'] = `Token ${token}` }
   return config
 })
+
+export function setAuthToken(token){
+  if(token){ localStorage.setItem('auth_token', token) }
+}
+
+export function clearAuthToken(){
+  localStorage.removeItem('auth_token')
+}
 
 export default api
