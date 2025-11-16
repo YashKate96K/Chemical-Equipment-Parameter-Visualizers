@@ -16,10 +16,19 @@ function getNumericColumns(rows) {
   if (!rows || rows.length === 0) return []
   const firstRow = rows[0]
   if (!firstRow) return []
-  const idLike = new Set(['id', 'ID', 'Id', 'index', 'Index', 'Row', 'row'])
-  return Object.keys(firstRow)
-    .filter(key => typeof firstRow[key] === 'number')
+  const idLike = new Set(['id', 'ID', 'Id', 'index', 'Index', 'Row', 'row', 'Record', 'record'])
+  const allKeys = Object.keys(firstRow)
+  return allKeys
     .filter(key => !idLike.has(key))
+    .filter(key => rows.some(r => {
+      const v = r[key]
+      if (typeof v === 'number') return isFinite(v)
+      if (typeof v === 'string' && v.trim() !== '') {
+        const n = Number(v)
+        return Number.isFinite(n)
+      }
+      return false
+    }))
 }
 
 function uniqueValues(rows, col) {
@@ -34,8 +43,9 @@ function getCategoricalColumns(rows, maxCardinality = 50, numericCols = []) {
   const firstRow = rows[0]
   if (!firstRow) return []
   const numericSet = new Set(numericCols)
+  const idLike = new Set(['id', 'ID', 'Id', 'index', 'Index', 'Row', 'row', 'Record', 'record'])
   const allCols = Object.keys(firstRow)
-  const potentialCols = allCols.filter(c => !numericSet.has(c) && (typeof firstRow[c] === 'string' || typeof firstRow[c] === 'boolean'))
+  const potentialCols = allCols.filter(c => !numericSet.has(c) && !idLike.has(c) && (typeof firstRow[c] === 'string' || typeof firstRow[c] === 'boolean'))
   return potentialCols.filter(col => {
     const u = uniqueValues(rows, col)
     return u.length > 0 && u.length <= maxCardinality
@@ -81,7 +91,17 @@ function computeSummaryStats(rows, numericCols) {
   const stats = {}
   for (const col of numericCols) {
     const total = rows.length
-    const vals = rows.map(r => r[col]).filter(v => typeof v === 'number' && isFinite(v))
+    const vals = rows
+      .map(r => {
+        const v = r[col]
+        if (typeof v === 'number') return v
+        if (typeof v === 'string' && v.trim() !== '') {
+          const n = Number(v)
+          return Number.isFinite(n) ? n : NaN
+        }
+        return NaN
+      })
+      .filter(v => typeof v === 'number' && isFinite(v))
     const n = vals.length
     const missing = Math.max(0, total - n)
     if (n === 0) {
@@ -120,7 +140,15 @@ function pearsonCorrelation(x, y) {
 function computeCorrelationMatrix(rows, numericCols) {
   if (!rows || rows.length === 0 || !numericCols || numericCols.length < 2) return { order: [], matrix: [] }
   const matrix = Array.from({ length: numericCols.length }, () => Array(numericCols.length).fill(0))
-  const colData = numericCols.map(col => rows.map(r => r[col]))
+  const colData = numericCols.map(col => rows.map(r => {
+    const v = r[col]
+    if (typeof v === 'number') return v
+    if (typeof v === 'string' && v.trim() !== '') {
+      const n = Number(v)
+      return Number.isFinite(n) ? n : NaN
+    }
+    return NaN
+  }))
   for (let i = 0; i < numericCols.length; i++) {
     for (let j = i; j < numericCols.length; j++) {
       if (i === j) matrix[i][j] = 1.0
@@ -137,7 +165,17 @@ function detectOutliers(rows, numericCols) {
   if (!rows || rows.length === 0) return []
   const outliers = []
   for (const col of numericCols) {
-    const vals = rows.map(r => r[col]).filter(v => typeof v === 'number' && isFinite(v))
+    const vals = rows
+      .map(r => {
+        const v = r[col]
+        if (typeof v === 'number') return v
+        if (typeof v === 'string' && v.trim() !== '') {
+          const n = Number(v)
+          return Number.isFinite(n) ? n : NaN
+        }
+        return NaN
+      })
+      .filter(v => typeof v === 'number' && isFinite(v))
     if (vals.length < 4) continue
     const q = computeQuartiles(vals)
     const iqr = q.q3 - q.q1
@@ -145,8 +183,14 @@ function detectOutliers(rows, numericCols) {
     const lowerBound = q.q1 - 1.5 * iqr
     const upperBound = q.q3 + 1.5 * iqr
     for (const row of rows) {
-      const val = row[col]
-      if (typeof val === 'number' && (val < lowerBound || val > upperBound)) {
+      const raw = row[col]
+      let val = NaN
+      if (typeof raw === 'number') val = raw
+      else if (typeof raw === 'string' && raw.trim() !== '') {
+        const n = Number(raw)
+        if (Number.isFinite(n)) val = n
+      }
+      if (typeof val === 'number' && isFinite(val) && (val < lowerBound || val > upperBound)) {
         outliers.push({ ...row, column: col, value: val })
       }
     }
@@ -479,7 +523,7 @@ function BoxPlotSVG({ stats, width = 600, height = 60 }) {
 // MAIN COMPONENT
 // ----------------------------------------------------------------------
 
-export default function DynamicExplorer({ rows: initialRows }) {
+export default function DynamicExplorer({ rows: initialRows, dataQuality }) {
   const [rows] = useState(initialRows || [])
   const [filters, setFilters] = useState({})
   const [query, setQuery] = useState('')
@@ -490,12 +534,33 @@ export default function DynamicExplorer({ rows: initialRows }) {
   const numericCols = useMemo(() => getNumericColumns(rows), [rows])
   const categoricalCols = useMemo(() => getCategoricalColumns(rows, 50, numericCols), [rows, numericCols])
   const allCols = useMemo(() => (rows.length > 0 ? Object.keys(rows[0]) : []), [rows])
+  const displayCols = useMemo(() => {
+    if (!allCols || allCols.length === 0) return []
+    const cols = [...allCols]
+    const isRecord = (c) => c === 'Record' || c === 'record'
+    cols.sort((a, b) => {
+      if (isRecord(a) && !isRecord(b)) return -1
+      if (!isRecord(a) && isRecord(b)) return 1
+      return 0
+    })
+    return cols
+  }, [allCols])
 
   useEffect(() => {
     const f = {}
     categoricalCols.forEach(c => f[c] = { type: 'category', selected: [] })
     numericCols.forEach(c => {
-      const vals = rows.map(r => r[c]).filter(v => typeof v === 'number' && isFinite(v))
+      const vals = rows
+        .map(r => {
+          const v = r[c]
+          if (typeof v === 'number') return v
+          if (typeof v === 'string' && v.trim() !== '') {
+            const n = Number(v)
+            return Number.isFinite(n) ? n : NaN
+          }
+          return NaN
+        })
+        .filter(v => typeof v === 'number' && isFinite(v))
       const min = Math.min(...vals)
       const max = Math.max(...vals)
       f[c] = {
@@ -510,7 +575,27 @@ export default function DynamicExplorer({ rows: initialRows }) {
   }, [rows, numericCols, categoricalCols])
 
   const filteredRows = useMemo(() => applyFilters(rows, filters), [rows, filters])
-  const stats = useMemo(() => computeSummaryStats(filteredRows, numericCols), [filteredRows, numericCols])
+
+  // Base stats from frontend computation
+  const baseStats = useMemo(() => computeSummaryStats(filteredRows, numericCols), [filteredRows, numericCols])
+
+  // If backend dataQuality is available, override missing counts so they
+  // match the server-side report (which inspects raw uploaded data).
+  const stats = useMemo(() => {
+    const missingMap = dataQuality?.missing_values || null
+    if (!missingMap) return baseStats
+    const merged = { ...baseStats }
+    const totalRows = filteredRows.length || rows.length
+    numericCols.forEach(col => {
+      const s = merged[col]
+      if (!s) return
+      const backendMissing = typeof missingMap[col] === 'number' ? missingMap[col] : s.missing
+      const total = typeof s.total === 'number' && s.total > 0 ? s.total : totalRows
+      const n = Math.max(0, total - backendMissing)
+      merged[col] = { ...s, missing: backendMissing, total, n }
+    })
+    return merged
+  }, [baseStats, dataQuality, numericCols, filteredRows.length, rows.length])
   const corr = useMemo(() => computeCorrelationMatrix(filteredRows, numericCols), [filteredRows, numericCols])
   const outliers = useMemo(() => detectOutliers(filteredRows, numericCols), [filteredRows, numericCols])
   const outliersByCol = useMemo(() => {
@@ -523,8 +608,14 @@ export default function DynamicExplorer({ rows: initialRows }) {
     const groups = new Map()
     filteredRows.forEach(r => {
       const key = String(r[catCol])
-      const v = r[numCol]
-      if (typeof v === 'number') {
+      const raw = r[numCol]
+      let v = NaN
+      if (typeof raw === 'number') v = raw
+      else if (typeof raw === 'string' && raw.trim() !== '') {
+        const n = Number(raw)
+        if (Number.isFinite(n)) v = n
+      }
+      if (typeof v === 'number' && isFinite(v)) {
         const g = groups.get(key) || { key, sum: 0, count: 0 }
         g.sum += v
         g.count += 1
@@ -704,7 +795,17 @@ export default function DynamicExplorer({ rows: initialRows }) {
           <Section title="Data Distribution" subtitle="Boxplots for numeric columns" icon={<Icon path={ICONS.stats} />}>
             <div className="space-y-4">
               {numericCols.map(col => {
-                const vals = filteredRows.map(r => r[col]).filter(v => typeof v === 'number')
+                const vals = filteredRows
+                  .map(r => {
+                    const v = r[col]
+                    if (typeof v === 'number') return v
+                    if (typeof v === 'string' && v.trim() !== '') {
+                      const n = Number(v)
+                      return Number.isFinite(n) ? n : NaN
+                    }
+                    return NaN
+                  })
+                  .filter(v => typeof v === 'number' && isFinite(v))
                 if (vals.length === 0) return null
                 const q = computeQuartiles(vals)
                 return (
@@ -730,7 +831,17 @@ export default function DynamicExplorer({ rows: initialRows }) {
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {numericCols.map(col=>{
               const arr = outliersByCol.get(col) || []
-              const vals = filteredRows.map(r=> r[col]).filter(v=> typeof v==='number' && isFinite(v))
+              const vals = filteredRows
+                .map(r => {
+                  const v = r[col]
+                  if (typeof v === 'number') return v
+                  if (typeof v === 'string' && v.trim() !== '') {
+                    const n = Number(v)
+                    return Number.isFinite(n) ? n : NaN
+                  }
+                  return NaN
+                })
+                .filter(v => typeof v === 'number' && isFinite(v))
               const q = computeQuartiles(vals)
               const lb = q.q1 - 1.5*(q.q3-q.q1)
               const ub = q.q3 + 1.5*(q.q3-q.q1)
@@ -771,7 +882,7 @@ export default function DynamicExplorer({ rows: initialRows }) {
             <div>
               <div className="text-sm font-medium mb-2">Toggle Columns:</div>
               <div className="flex flex-wrap gap-2">
-                {allCols.map(col => (
+                {allCols.filter(col => col !== 'Record' && col !== 'record').map(col => (
                   <label key={col} className="flex items-center gap-2 text-sm bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-md cursor-pointer">
                     <input type="checkbox" className={checkboxStyle} checked={!hiddenCols.has(col)} onChange={() => {
                       setHiddenCols(prev => {
@@ -791,7 +902,7 @@ export default function DynamicExplorer({ rows: initialRows }) {
               <table className="text-sm min-w-full">
                 <thead className="bg-gray-100">
                   <tr>
-                    {allCols.filter(c => !hiddenCols.has(c)).map(col => (
+                    {displayCols.filter(c => !hiddenCols.has(c)).map(col => (
                       <th key={col} className="p-3 border-b-2 border-gray-200 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">{col}</th>
                     ))}
                   </tr>
@@ -799,7 +910,7 @@ export default function DynamicExplorer({ rows: initialRows }) {
                 <tbody className="bg-white">
                   {paginatedRows.length > 0 ? paginatedRows.map((r, i) => (
                     <tr key={i} className="odd:bg-white even:bg-slate-50 hover:bg-slate-100">
-                      {allCols.filter(c => !hiddenCols.has(c)).map(col => (
+                      {displayCols.filter(c => !hiddenCols.has(c)).map(col => (
                         <td key={col} className="p-3 border-b border-gray-200 whitespace-nowrap">{String(r[col])}</td>
                       ))}
                     </tr>
