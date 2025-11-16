@@ -84,7 +84,7 @@ function App() {
           <div className="flex items-center gap-4">
             <Link
               to="/"
-              className="px-4 py-2 rounded-full bg-white/15 hover:bg-white/30 text-sm font-medium text-white border border-white/30 shadow-sm transition"
+              className="px-4 py-2 rounded-full bg-white/15 hover:bg-white/30 text-sm font-semibold text-black border border-white/30 shadow-sm transition"
             >
               Home
             </Link>
@@ -101,7 +101,9 @@ function App() {
             {isAuthed ? (
               <button
                 onClick={onSignOut}
-                className="text-sm text-teal-100/90 hover:text-white underline"
+                className="px-4 py-2 rounded-full border border-white/30 text-sm font-semibold hover:text-black hover:bg-white/20 shadow-sm transition
+
+"
               >
                 Sign out
               </button>

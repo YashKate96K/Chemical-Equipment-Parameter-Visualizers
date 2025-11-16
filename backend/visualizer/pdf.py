@@ -110,6 +110,8 @@ def build_pdf(dataset):
     if summary.get("all_columns"):
         line("Columns:")
         for col in summary["all_columns"]:
+            if col in ("Record", "record"):
+                continue
             line(col, indent=20, bullet=True)
 
     # -------- Summary Stats --------
@@ -118,6 +120,8 @@ def build_pdf(dataset):
     if summary.get("averages"):
         line("Averages:")
         for k, v in summary["averages"].items():
+            if k in ("Record", "record"):
+                continue
             try:
                 v = f"{float(v):.3f}"
             except:
@@ -127,11 +131,15 @@ def build_pdf(dataset):
     if summary.get("min"):
         line("Minimum Values:")
         for k, v in summary["min"].items():
+            if k in ("Record", "record"):
+                continue
             line(f"{k}: {v}", indent=20, bullet=True)
 
     if summary.get("max"):
         line("Maximum Values:")
         for k, v in summary["max"].items():
+            if k in ("Record", "record"):
+                continue
             line(f"{k}: {v}", indent=20, bullet=True)
 
     if summary.get("type_distribution"):
@@ -150,6 +158,8 @@ def build_pdf(dataset):
         numeric_cols = summary.get("numeric_columns") or [
             c for c in header if c not in ("Type", "Equipment Name")
         ]
+        # Treat Record as an ID column, not a numeric feature
+        numeric_cols = [c for c in numeric_cols if c not in ("Record", "record")]
 
         quality = compute_quality(header, rows)
         correlations = compute_correlations(rows, numeric_cols)
@@ -160,7 +170,9 @@ def build_pdf(dataset):
         missing = quality.get("missing_values", {})
         if missing:
             line("Missing Values (Top 5):")
-            for col, cnt in sorted(missing.items(), key=lambda a: a[1], reverse=True)[:5]:
+            # Skip Record column in missing-value listing
+            filtered_missing = {k: v for k, v in missing.items() if k not in ("Record", "record")}
+            for col, cnt in sorted(filtered_missing.items(), key=lambda a: a[1], reverse=True)[:5]:
                 line(f"{col}: {cnt}", indent=20, bullet=True)
 
         if quality.get("duplicate_rows", {}).get("count"):
@@ -178,7 +190,9 @@ def build_pdf(dataset):
             line(f"{a} vs {b}: r = {r}", indent=20, bullet=True)
 
         section("Variance & Skewness (Top 5)")
-        ordered = sorted(var_skew.items(), key=lambda a: a[1].get("variance", 0), reverse=True)
+        # Exclude Record column from variance/skewness listing
+        filtered_vs = {k: v for k, v in var_skew.items() if k not in ("Record", "record")}
+        ordered = sorted(filtered_vs.items(), key=lambda a: a[1].get("variance", 0), reverse=True)
         for col, st in ordered[:5]:
             v = st.get("variance")
             sk = st.get("skewness")

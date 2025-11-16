@@ -19,6 +19,7 @@ function DashboardPage(){
   const { id } = useParams()
   const datasetId = parseInt(id, 10)
   const [rows, setRows] = useState([])
+  const [dataQuality, setDataQuality] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -29,7 +30,10 @@ function DashboardPage(){
       setLoading(true); setError('')
       try{
         const { data } = await api.get(`/datasets/${datasetId}/health/`)
-        if(alive) setRows(data?.rows || [])
+        if(alive){
+          setRows(data?.rows || [])
+          setDataQuality(data?.data_quality || null)
+        }
       }catch(e){ if(alive) setError('Failed to load dataset') }
       finally{ if(alive) setLoading(false) }
     }
@@ -41,8 +45,15 @@ function DashboardPage(){
     <div className="min-h-screen relative text-gray-900 overflow-hidden">
       <header className="sticky top-0 backdrop-blur-2xl bg-white/10 border-b border-white/20 shadow z-20">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="text-white font-semibold">Dynamic Data Explorer Dashboard</div>
-          <Link to="/" className="text-teal-100 hover:text-white underline">Home</Link>
+          <div className="px-4 py-2 rounded-full border border-white/30 text-sm font-semibold text-black hover:text-black hover:bg-white/20 shadow-sm transition">
+            Dynamic Data Explorer Dashboard
+          </div>
+          <Link
+            to="/"
+            className="px-4 py-2 rounded-full border border-white/30 text-sm font-semibold text-black hover:text-black hover:bg-white/20 shadow-sm transition"
+          >
+            Home
+          </Link>
         </div>
       </header>
       <main className="max-w-7xl mx-auto px-6 py-8">
@@ -59,7 +70,7 @@ function DashboardPage(){
               <div className="mb-3 text-xs text-gray-600">Rows loaded: {rows?.length ?? 0}</div>
               {Array.isArray(rows) && rows.length>0 ? (
                 <ErrorBoundary>
-                  <DynamicExplorer rows={rows} />
+                  <DynamicExplorer rows={rows} dataQuality={dataQuality} />
                 </ErrorBoundary>
               ) : (
                 <div className="bg-white/80 rounded-xl p-4 border">No rows found for this dataset. Upload a dataset and try again.</div>
