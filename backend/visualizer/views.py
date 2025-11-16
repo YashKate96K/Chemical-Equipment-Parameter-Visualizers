@@ -59,6 +59,7 @@ def upload_csv(request):
 
 
 @api_view(['POST'])
+@authentication_classes([])  # disable auth for signup; allow anonymous registration
 @permission_classes([AllowAny])
 def register_user(request):
     username = request.data.get('username')
