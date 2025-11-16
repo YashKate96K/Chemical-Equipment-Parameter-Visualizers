@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # Chemical Equipment Parameter Visualizer
 
 Interactive web app to upload chemical equipment datasets, explore them with a dynamic dashboard, and export professional PDF reports.
@@ -136,5 +135,3 @@ docker compose up --build
 - Token auth is used for protecting upload and dataset endpoints.
 - Frontend and backend URLs are configurable via `.env` files.
 =======
-# Chemical-Equipment-Parameter-Visualizer
->>>>>>> c6120bbd835d4fb5e0d8fd2c66e55212f3b6e924
