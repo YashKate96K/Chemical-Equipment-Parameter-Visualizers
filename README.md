@@ -134,4 +134,3 @@ docker compose up --build
 - Only the **last 5 datasets** are kept; older ones are pruned on upload.
 - Token auth is used for protecting upload and dataset endpoints.
 - Frontend and backend URLs are configurable via `.env` files.
-=======
