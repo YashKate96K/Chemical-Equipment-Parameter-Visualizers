@@ -1,20 +1,40 @@
 # Chemical Equipment Parameter Visualizer
 
-Interactive web app to:
+Interactive web app to upload chemical equipment datasets, explore them with a dynamic dashboard, and export professional PDF reports.
 
-- Upload **chemical equipment datasets (CSV)**
+---
 
-- **Python** 3.10+
-- **Node.js** 18+ and **npm**
-- **Git**
-- (Optional) **virtualenv** or **conda**
+## What this app does
 
-### 1.2. Clone the repository
+- **Upload CSV / XLSX** datasets of equipment parameters.
+- **Authenticate** with Sign Up / Sign In (token-based auth via Django REST Framework).
+- **Explore data** in a dynamic React dashboard:
+  - Automatic detection of numeric & categorical columns.
+  - Summary cards with mean/median/min/max/std and missing-value counts.
+  - Correlation heatmap, boxplots, category distributions, K‑Means clustering.
+  - AI‑style insights (variability, skewness, correlations, outliers, dominant categories).
+  - Outliers overview per metric and a searchable, paginated data table.
+- **Generate PDF report** with:
+  - Dataset overview (rows, columns).
+  - Summary statistics and type distribution.
+  - Data‑quality highlights (missing values, duplicates).
+  - Strongest correlations and variance/skewness per metric.
 
-```bash
-git clone https://github.com/YashKate96K/Chemical-Equipment-Parameter-Visualizer.git
-cd Chemical-Equipment-Parameter-Visualizer
+Backend: **Django + DRF**  
+Frontend: **React 18 + Vite + TailwindCSS + Recharts**
+
+---
+
+## Expected CSV structure (minimal example)
+
+```text
+Equipment Name,Type,Flowrate,Pressure,Temperature
+Pump-1,Pump,120,5.2,110
+Compressor-1,Compressor,95,8.4,95
+Valve-1,Valve,60,4.1,105
 ```
+
+Additional columns are allowed; the dashboard adapts automatically.
 
 ---
 
@@ -221,50 +241,19 @@ This project is designed for:
 **Backend**
 
 ```bash
-cd backend
-python -m venv .venv
-.venv\Scripts\activate        # or source .venv/bin/activate
-pip install -r requirements.txt
-python manage.py migrate
-python manage.py runserver
+docker compose up --build
 ```
 
-**Frontend**
-
-```bash
-cd frontend
-npm install
-npm run dev
-npm run build    # production build
-```
+- Backend: http://localhost:8000  
+- Frontend: http://localhost:5173
 
 ---
 
-## 8. Simplified Folder Structure
+## Notes
 
-```text
-backend/
-  config/
-    settings.py
-    urls.py
-  visualizer/
-    views.py
-    urls.py
-    pdf.py
-frontend/
-  public/
-    index.html
-    _redirects
-  src/
-    components/
-      HealthDashboard.jsx
-      DynamicExplorer.jsx
-    pages/
-      Dashboard.jsx
-    App.jsx
-  .env.example
-README.md
-README_deploy.md
-```
-
-This README should be enough for a **new user** to go from cloning the repo to running the app locally and understanding how to deploy it.
+- Only the **last 5 datasets** are kept; older ones are pruned on upload.
+- Token auth is used for protecting upload and dataset endpoints.
+- Frontend and backend URLs are configurable via `.env` files.
+=======
+# Chemical-Equipment-Parameter-Visualizer
+>>>>>>> c6120bbd835d4fb5e0d8fd2c66e55212f3b6e924
