@@ -1,6 +1,6 @@
 # Chemical Equipment Parameter Visualizer
 
-Interactive web app to upload chemical equipment datasets, explore them with a dynamic dashboard, and export professional PDF reports.
+Interactive web and desktop app to upload chemical equipment datasets, explore them with a dynamic dashboard, and export professional PDF reports.
 
 ---
 
@@ -14,6 +14,11 @@ Interactive web app to upload chemical equipment datasets, explore them with a d
   - Correlation heatmap, boxplots, category distributions, K‑Means clustering.
   - AI‑style insights (variability, skewness, correlations, outliers, dominant categories).
   - Outliers overview per metric and a searchable, paginated data table.
+- **Desktop app** (PyQt5) with:
+  - Same analytics panels as the web frontend (Summary Stats, Insights, Outliers by Metric).
+  - Real-time chart rendering with matplotlib.
+  - Clear/Update controls and dataset list with cleaned filenames.
+  - Asynchronous analytics fetching from the backend.
 - **Generate PDF report** with:
   - Dataset overview (rows, columns).
   - Summary statistics and type distribution.
@@ -21,7 +26,8 @@ Interactive web app to upload chemical equipment datasets, explore them with a d
   - Strongest correlations and variance/skewness per metric.
 
 Backend: **Django + DRF**  
-Frontend: **React 18 + Vite + TailwindCSS + Recharts**
+Frontend: **React 18 + Vite + TailwindCSS + Recharts**  
+Desktop: **PyQt5 + matplotlib + numpy + scipy**
 
 ---
 
@@ -77,10 +83,12 @@ http://localhost:8000/api/
 
 ### 2.4. Main API endpoints
 
-- `POST /api/upload/`  – upload CSV dataset
+- `POST /api/upload/` – upload CSV dataset
 - `GET  /api/datasets/` – list datasets
 - `GET  /api/datasets/<id>/health/` – JSON health + rows for Dynamic Data Explorer
 - `GET  /api/datasets/<id>/report/` – generate PDF report
+- `GET  /api/datasets/<id>/rows/` – paginated dataset rows for desktop analytics
+- `GET  /api/datasets/<id>/quality_metrics/` – quality metrics for desktop analytics
 - `POST /api/auth/register/` – register user `{ "username": "...", "password": "..." }`
 - `POST /api/auth/token/` – obtain auth token `{ "username": "...", "password": "..." }`
 
@@ -88,9 +96,35 @@ Authentication uses **Django REST Framework TokenAuthentication**.
 
 ---
 
-## 3. Frontend (React + Vite)
+## 3. Desktop App (PyQt5)
 
 ### 3.1. Install dependencies
+
+From the project root:
+
+```bash
+cd desktop
+pip install -r requirements.txt
+```
+
+### 3.2. Run desktop app
+
+```bash
+python main.py
+```
+
+The desktop app connects to the same backend API as the web frontend. Features:
+
+- Dataset list with cleaned, user-friendly filenames.
+- Chart controls (type, X/Y axis selectors, Update/Clear buttons).
+- Right-side analytics panel with Summary Stats, Insights, and Outliers by Metric.
+- Asynchronous analytics fetching (rows + quality metrics) from the backend.
+
+---
+
+## 4. Frontend (React + Vite)
+
+### 4.1. Install dependencies
 
 From the project root:
 
@@ -99,7 +133,7 @@ cd frontend
 npm install
 ```
 
-### 3.2. Configure environment
+### 4.2. Configure environment
 
 Create `.env` in `frontend` (beside `package.json`) based on `.env.example`:
 
@@ -111,7 +145,7 @@ VITE_API_TOKEN=
 - `VITE_API_BASE_URL` must point to your backend `/api`.
 - `VITE_API_TOKEN` can stay empty; it is filled after sign‑in.
 
-### 3.3. Run frontend dev server
+### 4.3. Run frontend dev server
 
 ```bash
 npm run dev
@@ -125,7 +159,9 @@ http://localhost:5173/
 
 ---
 
-## 4. Using the App Locally
+## 5. Using the Apps Locally
+
+### Web Frontend
 
 1. **Start backend**  
    `python manage.py runserver` (in `backend/`).
@@ -157,16 +193,37 @@ http://localhost:5173/
 7. **Download PDF report**
    - From the dashboard, generate a PDF via `/api/datasets/<id>/report/`.
 
+### Desktop App
+
+1. **Start backend**  
+   `python manage.py runserver` (in `backend/`).
+
+2. **Run desktop app**  
+   `python main.py` (in `desktop/`).
+
+3. **Select a dataset**  
+   - Dataset list shows cleaned, user-friendly filenames.
+   - Select a dataset to load it into the visualization widget.
+
+4. **Explore charts and analytics**  
+   - Choose chart type and axes.
+   - Click **Update** to render the chart.
+   - View the right-side analytics panel (Summary Stats, Insights, Outliers by Metric) computed from real dataset rows.
+   - Use **Clear** to reset the chart.
+
+5. **Export chart**  
+   - Use the Export button to save the current chart as PNG/PDF/SVG.
+
 ---
 
-## 5. Deployment
+## 6. Deployment
 
 This project is designed for:
 
 - **Backend** → Render
 - **Frontend** → Netlify
 
-### 5.1. Backend on Render
+### 6.1. Backend on Render
 
 1. Create a new **Web Service** on Render pointing to the `backend` folder.
 2. Environment variables (minimum):
@@ -186,7 +243,7 @@ This project is designed for:
    https://chemical-equipment-parameter-visualizer-XXXX.onrender.com
    ```
 
-### 5.2. Frontend on Netlify
+### 6.2. Frontend on Netlify
 
 1. In `frontend/.env` (for production), set:
 
@@ -214,7 +271,7 @@ This project is designed for:
 
 ---
 
-## 6. Common Issues & Fixes
+## 7. Common Issues & Fixes
 
 - **Netlify 404 “Page not found” on reload**  
   `_redirects` missing or not deployed. Ensure `frontend/public/_redirects` contains:
@@ -236,7 +293,7 @@ This project is designed for:
 
 ---
 
-## 7. Script Cheat Sheet
+## 8. Script Cheat Sheet
 
 **Backend**
 
@@ -249,11 +306,10 @@ docker compose up --build
 
 ---
 
-## Notes
+## 9. Notes
 
 - Only the **last 5 datasets** are kept; older ones are pruned on upload.
 - Token auth is used for protecting upload and dataset endpoints.
 - Frontend and backend URLs are configurable via `.env` files.
-=======
-# Chemical-Equipment-Parameter-Visualizer
->>>>>>> c6120bbd835d4fb5e0d8fd2c66e55212f3b6e924
+- Desktop app fetches analytics data from the same backend API as the web frontend.
+- Desktop analytics panel shows all numeric columns (scrollable) and updates automatically on dataset selection.
