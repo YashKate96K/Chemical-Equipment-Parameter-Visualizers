@@ -319,82 +319,13 @@ chemical-equipment-parameter-visualizer/
 - **Recharts** - Charting library
 - **Axios** - HTTP client
 
----
-
-## 🔍 Troubleshooting
-
-### Common Issues
-
-#### **Heatmap Not Working**
-- **Cause**: Insufficient numeric columns or invalid data
-- **Solution**: Ensure dataset has at least 2 numeric columns with valid data
-- **Debug**: Check console for DEBUG messages
-
-#### **PDF Generation Fails**
-- **Cause**: Missing ReportLab or invalid data
-- **Solution**: `pip install reportlab` and check data quality
-- **Debug**: Look for error messages in terminal
-
-#### **Authentication Issues**
-- **Cause**: Invalid tokens or backend URL mismatch
-- **Solution**: Re-authenticate and check API_BASE_URL
-- **Debug**: Check browser console and network tab
-
-#### **Desktop App Connection Issues**
-- **Cause**: Backend not running or wrong URL
-- **Solution**: Start backend server and check API_BASE_URL
-- **Debug**: Check terminal for connection errors
-
-### Debug Mode
-
-Enable debug logging by setting:
-```python
-import logging
-logging.basicConfig(level=logging.DEBUG)
-```
-
----
-
 ## 📝 License & Contributing
 
 ### License
 This project is licensed under the MIT License - see the LICENSE file for details.
 
-### Contributing
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests if applicable
-5. Submit a pull request
 
 ---
-
-## 📞 Support
-
-For issues and questions:
-- **GitHub Issues**: Report bugs and request features
-- **Documentation**: Check this README and code comments
-- **Debug Mode**: Enable logging for detailed error information
-
----
-
-## 🎯 Future Roadmap
-
-### Planned Features
-- [ ] **Advanced Analytics**: Machine learning insights
-- [ ] **Data Cleaning**: Automated data preprocessing
-- [ ] **Export Options**: Excel, JSON, CSV export
-- [ ] **Collaboration**: Multi-user support
-- [ ] **Real-time Updates**: WebSocket support
-- [ ] **Mobile App**: React Native application
-
-### Technical Improvements
-- [ ] **Performance**: Optimized data processing
-- [ ] **Security**: Enhanced authentication
-- [ ] **Scalability**: Database optimization
-- [ ] **Testing**: Comprehensive test suite
-- [ ] **Documentation**: API documentation
-- [ ] **CI/CD**: Automated deployment
 
 ---
 
@@ -429,4 +360,3 @@ npm install && npm run dev
 
 ---
 
-*Built with ❤️ for chemical equipment data analysis*
