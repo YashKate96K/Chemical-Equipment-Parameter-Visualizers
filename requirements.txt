@@ -1,11 +1,35 @@
+# Core Django Framework
 Django==4.2.10
 djangorestframework==3.14.0
 django-cors-headers==4.3.1
-reportlab==4.2.2
-python-dotenv==1.0.1
-numpy==1.26.4
-scikit-learn==1.4.2
-openpyxl==3.1.5
-gunicorn==21.2.0
+djangorestframework-authtoken==1.2.0
+
+# Database
 psycopg2-binary==2.9.7
 dj-database-url==0.5.0
+
+# Data Processing & Analysis
+numpy==1.26.4
+scikit-learn==1.4.2
+scipy==1.11.4
+pandas==2.1.4
+
+# File Processing
+openpyxl==3.1.5
+xlrd==2.0.1
+
+# PDF Generation
+reportlab==4.2.2
+
+# Environment & Configuration
+python-dotenv==1.0.1
+
+# Security & Validation
+cryptography==41.0.8
+Pillow==10.1.0
+
+# Development & Testing
+pytest==7.4.3
+pytest-django==4.7.0
+black==23.12.1
+flake8==6.1.0
