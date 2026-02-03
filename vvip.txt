@@ -1,0 +1,1486 @@
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.figure import Figure
+from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
+                             QPushButton, QComboBox, QGridLayout, QFrame,
+                             QScrollArea, QSplitter, QMessageBox, QApplication,
+                             QFileDialog, QProgressBar, QProgressDialog)
+from PyQt5.QtCore import Qt, pyqtSignal, QThread, pyqtSlot
+from PyQt5.QtGui import QFont
+from scipy import stats
+import os
+import json
+import numpy as np
+from datetime import datetime
+from reportlab.lib.pagesizes import letter, A4
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, Table, TableStyle, PageBreak
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import inch
+from reportlab.lib import colors
+from reportlab.pdfgen import canvas
+from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
+import io
+import tempfile
+
+matplotlib.use('Qt5Agg')
+
+class AnalyticsFetchThread(QThread):
+    loaded = pyqtSignal(dict)
+    
+    def __init__(self, api_client, dataset_id, limit=500, offset=0, parent=None):
+        super().__init__(parent)
+        self.api_client = api_client
+        self.dataset_id = dataset_id
+        self.limit = limit
+        self.offset = offset
+    
+    def run(self):
+        payload = {'rows': None, 'quality': None, 'error': None}
+        try:
+            rows_resp = self.api_client.get_dataset_rows(self.dataset_id, limit=self.limit, offset=self.offset)
+            payload['rows'] = rows_resp
+            try:
+                payload['quality'] = self.api_client.get_quality_metrics(self.dataset_id)
+            except Exception:
+                payload['quality'] = None
+        except Exception as e:
+            payload['error'] = str(e)
+        self.loaded.emit(payload)
+
+
+class MplCanvas(FigureCanvas):
+    def __init__(self, parent=None, width=6, height=4, dpi=100):
+        self.fig = Figure(figsize=(width, height), dpi=dpi, facecolor='white')
+        self.axes = self.fig.add_subplot(111)
+        super().__init__(self.fig)
+        self.setParent(parent)
+        self.current_palette = 'viridis'
+        # Better default margins for visibility
+        self.fig.subplots_adjust(left=0.12, right=0.95, top=0.92, bottom=0.12, wspace=0, hspace=0)
+        self.axes.set_axis_off()
+        self.fig.patch.set_facecolor('white')
+        self.axes.patch.set_facecolor('white')
+
+    def clear(self):
+        self.axes.clear()
+        self.axes.set_axis_off()
+        self.fig.subplots_adjust(left=0.12, right=0.95, top=0.92, bottom=0.12, wspace=0, hspace=0)
+        self.draw()
+
+    def update_chart_style(self):
+        self.axes.set_facecolor('white')
+        self.fig.patch.set_facecolor('white')
+        
+        # Ensure spines are visible
+        for spine in self.axes.spines.values():
+            spine.set_color('#e5e7eb')
+            spine.set_linewidth(1)
+            spine.set_visible(True)
+        
+        # Grid and tick styling
+        self.axes.grid(True, alpha=0.3, linestyle='--', linewidth=0.5, color='#9ca3af')
+        self.axes.tick_params(colors='#374151', labelsize=10, which='both', 
+                             length=4, width=1, direction='out')
+        
+        # Title styling
+        if self.axes.get_title():
+            self.axes.set_title(self.axes.get_title(), fontsize=14, fontweight='600', 
+                              color='#1f2937', pad=15)
+        
+        # Axis labels styling
+        if self.axes.get_xlabel():
+            self.axes.set_xlabel(self.axes.get_xlabel(), fontsize=11, 
+                               color='#374151', fontweight='500')
+        if self.axes.get_ylabel():
+            self.axes.set_ylabel(self.axes.get_ylabel(), fontsize=11, 
+                               color='#374151', fontweight='500')
+        
+        # Ensure proper layout
+        self.fig.tight_layout(pad=1.5)
+
+    def export_chart(self, filename):
+        if filename.endswith('.png'):
+            self.fig.savefig(filename, dpi=300, bbox_inches='tight', facecolor='white')
+        elif filename.endswith('.pdf'):
+            self.fig.savefig(filename, bbox_inches='tight', facecolor='white')
+        elif filename.endswith('.svg'):
+            self.fig.savefig(filename, bbox_inches='tight', facecolor='white')
+        else:
+            raise ValueError("Unsupported file format. Use .png, .pdf, or .svg")
+
+    def _prepare_axes(self, title="", xlabel="", ylabel=""):
+        self.axes.set_axis_on()
+        self.axes.set_title(title)
+        self.axes.set_xlabel(xlabel)
+        self.axes.set_ylabel(ylabel)
+        self.update_chart_style()
+
+    def line_chart(self, x, y, title="", xlabel="", ylabel=""):
+        self.axes.clear()
+        self._prepare_axes(title, xlabel, ylabel)
+        self.axes.plot(x, y, color='#3b82f6', linewidth=2, marker='o', markersize=4, alpha=0.8)
+        self.fig.tight_layout(pad=1.5)
+        self.draw()
+
+    def bar_chart(self, labels, values, title="", xlabel="", ylabel=""):
+        self.axes.clear()
+        self._prepare_axes(title, xlabel, ylabel)
+        bars = self.axes.bar(labels, values, color='#3b82f6', alpha=0.9, edgecolor='#2563eb')
+        self.axes.tick_params(axis='x', rotation=45, labelsize=9)
+        # Add value labels on top of bars
+        for bar in bars:
+            height = bar.get_height()
+            self.axes.text(bar.get_x() + bar.get_width()/2., height,
+                         f'{height:.1f}',
+                         ha='center', va='bottom', fontsize=9, color='#374151')
+        self.fig.tight_layout(pad=1.5)
+        self.draw()
+
+    def scatter_plot(self, x, y, title="", xlabel="", ylabel=""):
+        self.axes.clear()
+        self._prepare_axes(title, xlabel, ylabel)
+        self.axes.scatter(x, y, s=50, alpha=0.6, color='#3b82f6', edgecolors='#1e40af', linewidths=1)
+        self.fig.tight_layout(pad=1.5)
+        self.draw()
+
+    def histogram(self, data, title="", xlabel=""):
+        self.axes.clear()
+        self._prepare_axes(title, xlabel, "Frequency")
+        n, bins, patches = self.axes.hist(data, bins=20, color='#3b82f6', alpha=0.7, edgecolor='#1e40af', linewidth=1.2)
+        
+        # Add count labels on top of bars
+        for i, patch in enumerate(patches):
+            height = patch.get_height()
+            if height > 0:
+                self.axes.text(patch.get_x() + patch.get_width()/2., height,
+                             f'{int(height)}',
+                             ha='center', va='bottom', fontsize=8, color='#374151')
+        
+        self.fig.tight_layout(pad=1.5)
+        self.draw()
+
+    def box_plot(self, data, title="", ylabel=""):
+        self.axes.clear()
+        self._prepare_axes(title, "", ylabel)
+        
+        bp = self.axes.boxplot(
+            data,
+            vert=True,
+            patch_artist=True,
+            boxprops=dict(facecolor='#3b82f6', alpha=0.5, edgecolor='#2563eb', linewidth=1.5),
+            medianprops=dict(color='#1f2937', linewidth=2),
+            whiskerprops=dict(color='#6b7280', linewidth=1.5),
+            capprops=dict(color='#6b7280', linewidth=1.5),
+            flierprops=dict(marker='o', markerfacecolor='#ef4444', markersize=6, markeredgecolor='#dc2626', alpha=0.6),
+        )
+        
+        # Add statistics text
+        stats_text = f"Median: {np.median(data):.2f}\nMean: {np.mean(data):.2f}"
+        self.axes.text(1.15, 0.5, stats_text, transform=self.axes.transAxes,
+                      fontsize=10, verticalalignment='center',
+                      bbox=dict(boxstyle='round', facecolor='#f3f4f6', alpha=0.8, edgecolor='#e5e7eb'))
+        
+        self.fig.tight_layout(pad=1.5)
+        self.draw()
+
+    def heatmap(self, matrix, labels, title=""):
+        self.axes.clear()
+        self.axes.set_axis_on()
+        
+        im = self.axes.imshow(matrix, cmap='coolwarm', vmin=-1, vmax=1, aspect='auto')
+        
+        # Set ticks and labels
+        self.axes.set_xticks(range(len(labels)))
+        self.axes.set_yticks(range(len(labels)))
+        self.axes.set_xticklabels(labels, rotation=45, ha='right', fontsize=9, color='#374151')
+        self.axes.set_yticklabels(labels, fontsize=9, color='#374151')
+        
+        # Add correlation values in cells
+        for i in range(len(labels)):
+            for j in range(len(labels)):
+                text = self.axes.text(j, i, f'{matrix[i][j]:.2f}',
+                                    ha="center", va="center", color="white" if abs(matrix[i][j]) > 0.5 else "black",
+                                    fontsize=8, fontweight='600')
+        
+        # Title
+        self.axes.set_title(title, fontsize=14, fontweight='600', color='#1f2937', pad=15)
+        
+        # Colorbar
+        cbar = self.fig.colorbar(im, ax=self.axes, fraction=0.046, pad=0.04)
+        cbar.ax.tick_params(labelsize=9, colors='#374151')
+        
+        self.fig.tight_layout(pad=1.5)
+        self.draw()
+
+    def donut_chart(self, labels, values, title=""):
+        self.axes.clear()
+        self.axes.set_axis_on()
+        
+        # Filter out zero values
+        non_zero = np.array(values) > 0
+        if not any(non_zero):
+            self.axes.text(0.5, 0.5, 'No data to display', 
+                          ha='center', va='center', fontsize=12, color='#6b7280')
+            self.axes.set_title(title, fontsize=14, fontweight='600', color='#1f2937', pad=15)
+            self.draw()
+            return
+        
+        labels = [labels[i] for i in range(len(labels)) if non_zero[i]]
+        values = [values[i] for i in range(len(values)) if non_zero[i]]
+        
+        # Use a valid colormap with fallback
+        try:
+            cmap = plt.cm.get_cmap(self.current_palette)
+        except (ValueError, KeyError):
+            cmap = plt.cm.get_cmap('viridis')
+        
+        colors = cmap(np.linspace(0.2, 0.9, len(values)))
+        
+        # Calculate percentages
+        total = sum(values)
+        percentages = [v/total*100 for v in values]
+        
+        # Create pie chart with percentage labels
+        def make_autopct(values):
+            def my_autopct(pct):
+                return f'{pct:.1f}%' if pct > 5 else ''
+            return my_autopct
+        
+        wedges, texts, autotexts = self.axes.pie(
+            values, 
+            labels=None, 
+            autopct=make_autopct(values),
+            startangle=90, 
+            colors=colors,
+            textprops={'fontsize': 9, 'color': 'white', 'fontweight': '700'},
+            pctdistance=0.85
+        )
+        
+        # Create donut hole
+        centre = plt.Circle((0, 0), 0.70, fc='white')
+        self.axes.add_artist(centre)
+        
+        # Add legend with counts
+        legend_labels = [f'{labels[i]} ({int(values[i])} - {percentages[i]:.1f}%)' 
+                        for i in range(len(labels))]
+        self.axes.legend(wedges, legend_labels, 
+                        loc='center left', 
+                        bbox_to_anchor=(1.0, 0.5), 
+                        fontsize=9, 
+                        frameon=True, 
+                        fancybox=True, 
+                        shadow=False,
+                        title='Distribution')
+        
+        # Title
+        self.axes.set_title(title, fontsize=14, fontweight='600', color='#1f2937', pad=15)
+        
+        self.axes.axis('equal')
+        self.fig.tight_layout(pad=1.5)
+        self.draw()
+
+
+class VisualizationWidget(QWidget):
+    def __init__(self, api_client, parent=None):
+        super().__init__(parent)
+        self.api_client = api_client
+        self.current_dataset = None
+        self.current_palette = 'viridis'
+        self.analytics_thread = None
+        self._analytics_rows = []
+        self.init_ui()
+        self.apply_modern_styling()
+
+    def init_ui(self):
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(12, 12, 12, 12)
+        main_layout.setSpacing(12)
+        
+        self.controls_panel = self.create_controls_panel()
+        main_layout.addWidget(self.controls_panel)
+        
+        splitter = QSplitter(Qt.Horizontal)
+        splitter.setChildrenCollapsible(False)
+        
+        self.canvas = MplCanvas(self, width=8, height=6, dpi=100)
+        splitter.addWidget(self.canvas)
+        
+        self.analytics_panel = self.create_analytics_panel()
+        splitter.addWidget(self.analytics_panel)
+        
+        splitter.setStretchFactor(0, 1)  # Canvas - takes remaining space
+        splitter.setStretchFactor(1, 0)  # Analytics panel - fixed width
+        splitter.setSizes([800, 400])
+        
+        main_layout.addWidget(splitter)
+        self.canvas.current_palette = self.current_palette
+
+    def create_controls_panel(self):
+        panel = QFrame()
+        panel.setFixedHeight(120)
+        panel.setStyleSheet("QFrame { background-color: #f8fafc; border: 1px solid #e5e7eb; border-radius: 12px; }")
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(16, 12, 16, 12)
+        layout.setSpacing(8)
+        
+        controls_layout = QHBoxLayout()
+        controls_layout.setSpacing(12)
+        
+        # Chart Type
+        chart_type_layout = QVBoxLayout()
+        chart_type_layout.setContentsMargins(0, 0, 0, 0)
+        chart_type_layout.setSpacing(4)
+        chart_type_label = QLabel("Chart Type")
+        chart_type_label.setStyleSheet("font-size: 11px; font-weight: 600; color: #6b7280;")
+        chart_type_layout.addWidget(chart_type_label)
+        self.viz_type_combo = QComboBox()
+        self.viz_type_combo.addItem("Line Chart", "line")
+        self.viz_type_combo.addItem("Bar Chart", "bar")
+        self.viz_type_combo.addItem("Scatter Plot", "scatter")
+        self.viz_type_combo.addItem("Histogram", "hist")
+        self.viz_type_combo.addItem("Box Plot", "box")
+        self.viz_type_combo.addItem("Heatmap", "heatmap")
+        self.viz_type_combo.addItem("Donut Chart", "donut")
+        self.viz_type_combo.currentTextChanged.connect(self.on_chart_type_changed)
+        chart_type_layout.addWidget(self.viz_type_combo)
+        controls_layout.addLayout(chart_type_layout)
+        
+        # X-Axis
+        x_axis_layout = QVBoxLayout()
+        x_axis_layout.setContentsMargins(0, 0, 0, 0)
+        x_axis_layout.setSpacing(4)
+        x_axis_label = QLabel("X-Axis")
+        x_axis_label.setStyleSheet("font-size: 11px; font-weight: 600; color: #6b7280;")
+        x_axis_layout.addWidget(x_axis_label)
+        self.x_axis_combo = QComboBox()
+        self.x_axis_combo.setMinimumWidth(120)
+        x_axis_layout.addWidget(self.x_axis_combo)
+        controls_layout.addLayout(x_axis_layout)
+        
+        # Y-Axis
+        y_axis_layout = QVBoxLayout()
+        y_axis_layout.setContentsMargins(0, 0, 0, 0)
+        y_axis_layout.setSpacing(4)
+        y_axis_label = QLabel("Y-Axis")
+        y_axis_label.setStyleSheet("font-size: 11px; font-weight: 600; color: #6b7280;")
+        y_axis_layout.addWidget(y_axis_label)
+        self.y_axis_combo = QComboBox()
+        self.y_axis_combo.setMinimumWidth(120)
+        y_axis_layout.addWidget(self.y_axis_combo)
+        controls_layout.addLayout(y_axis_layout)
+        
+        controls_layout.addStretch()
+        layout.addLayout(controls_layout)
+        
+        # Buttons
+        button_layout = QHBoxLayout()
+        button_layout.setSpacing(8)
+        button_layout.setContentsMargins(0, 0, 0, 0)
+        
+        self.update_btn = QPushButton("Update")
+        self.update_btn.clicked.connect(self.update_chart)
+        button_layout.addWidget(self.update_btn)
+        
+        self.clear_btn = QPushButton("Clear")
+        self.clear_btn.clicked.connect(self.clear_chart)
+        button_layout.addWidget(self.clear_btn)
+        
+        export_layout = QHBoxLayout()
+        self.export_btn = QPushButton("📊 Export Chart")
+        self.export_btn.clicked.connect(self.export_chart)
+        self.export_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #10b981;
+                color: white;
+                border: none;
+                padding: 8px 12px;
+                border-radius: 6px;
+                font-weight: 600;
+                font-size: 12px;
+            }
+            QPushButton:hover { background-color: #059669; }
+            QPushButton:disabled { background-color: #d1d5db; }
+        """)
+        
+        self.report_btn = QPushButton("📄 Generate PDF Report")
+        self.report_btn.clicked.connect(self.generate_pdf_report)
+        self.report_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #3b82f6;
+                color: white;
+                border: none;
+                padding: 8px 12px;
+                border-radius: 6px;
+                font-weight: 600;
+                font-size: 12px;
+            }
+            QPushButton:hover { background-color: #2563eb; }
+            QPushButton:disabled { background-color: #d1d5db; }
+        """)
+        
+        export_layout.addWidget(self.export_btn)
+        export_layout.addWidget(self.report_btn)
+        export_layout.addStretch()
+        button_layout.addLayout(export_layout)
+        
+        button_layout.addStretch()
+        layout.addLayout(button_layout)
+        
+        self.set_controls_enabled(False)
+        return panel
+
+    def create_analytics_panel(self):
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setMinimumWidth(360)
+        scroll.setMaximumWidth(480)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setStyleSheet("QScrollArea { background-color: #f8fafc; border: none; }")
+        
+        container = QWidget()
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(6, 6, 6, 6)
+        layout.setSpacing(8)
+        
+        def section(title, subtitle):
+            frame = QFrame()
+            frame.setStyleSheet("QFrame { background-color: #ffffff; border: 1px solid #e5e7eb; border-radius: 8px; }")
+            l = QVBoxLayout(frame)
+            l.setContentsMargins(10, 10, 10, 10)
+            l.setSpacing(6)
+            row = QHBoxLayout()
+            row.setSpacing(4)
+            t = QLabel(title)
+            t.setStyleSheet("font-size: 12px; font-weight: 700; color: #1f2937;")
+            row.addWidget(t)
+            row.addStretch()
+            s = QLabel(subtitle)
+            s.setStyleSheet("font-size: 9px; color: #6b7280;")
+            row.addWidget(s)
+            l.addLayout(row)
+            return frame, l
+        
+        self.summary_frame, summary_layout = section("Summary Stats", "Key numeric metrics")
+        self.summary_grid = QGridLayout()
+        self.summary_grid.setContentsMargins(0, 0, 0, 0)
+        self.summary_grid.setHorizontalSpacing(6)
+        self.summary_grid.setVerticalSpacing(6)
+        summary_layout.addLayout(self.summary_grid)
+        
+        self.insights_frame, insights_layout = section("Insights", "Auto-generated observations")
+        self.insights_label = QLabel("Select a dataset to see insights")
+        self.insights_label.setWordWrap(True)
+        self.insights_label.setStyleSheet("font-size: 11px; color: #374151;")
+        insights_layout.addWidget(self.insights_label)
+        
+        self.outliers_frame, out_layout = section("Outliers by Metric", "IQR rule per numeric column")
+        self.outliers_grid = QGridLayout()
+        self.outliers_grid.setContentsMargins(0, 0, 0, 0)
+        self.outliers_grid.setHorizontalSpacing(6)
+        self.outliers_grid.setVerticalSpacing(6)
+        out_layout.addLayout(self.outliers_grid)
+        
+        layout.addWidget(self.summary_frame)
+        layout.addWidget(self.insights_frame)
+        layout.addWidget(self.outliers_frame)
+        layout.addStretch()
+        
+        scroll.setWidget(container)
+        return scroll
+
+    def apply_modern_styling(self):
+        self.setStyleSheet("""
+            QWidget { font-family: 'Inter', 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif; font-size: 12px; color: #1f2937; background-color: #ffffff; }
+            QComboBox { background-color: #ffffff; border: 2px solid #e5e7eb; border-radius: 8px; padding: 6px 12px; font-size: 12px; min-height: 20px; }
+            QComboBox:hover { border-color: #d1d5db; }
+            QComboBox:focus { border-color: #3b82f6; outline: none; }
+            QComboBox::drop-down { border: none; width: 20px; }
+            QComboBox::down-arrow { image: none; border-left: 4px solid transparent; border-right: 4px solid transparent; border-top: 4px solid #6b7280; margin-right: 4px; }
+            QPushButton { background-color: #3b82f6; color: white; border: none; border-radius: 8px; padding: 6px 12px; font-size: 11px; font-weight: 600; min-height: 22px; }
+            QPushButton:hover { background-color: #2563eb; }
+            QPushButton:pressed { background-color: #1d4ed8; }
+            QPushButton:disabled { background-color: #e5e7eb; color: #9ca3af; }
+            QLabel { color: #1f2937; }
+            QFrame { background-color: #ffffff; border-color: #e5e7eb; }
+        """)
+
+    def on_chart_type_changed(self, chart_type):
+        """Handle chart type change - update UI based on selected chart"""
+        chart_data = self.viz_type_combo.currentData()
+        
+        # Enable/disable axis selectors based on chart type
+        if chart_data in ['hist', 'box']:
+            # These charts only need Y-axis
+            self.x_axis_combo.setEnabled(False)
+            self.y_axis_combo.setEnabled(True)
+        elif chart_data in ['heatmap', 'donut']:
+            # These charts don't use traditional axes
+            self.x_axis_combo.setEnabled(False)
+            self.y_axis_combo.setEnabled(False)
+        else:
+            # Line, bar, scatter need both axes
+            self.x_axis_combo.setEnabled(True)
+            self.y_axis_combo.setEnabled(True)
+
+    def load_dataset(self, dataset):
+        """Load a dataset and populate column selectors"""
+        self.current_dataset = dataset
+        try:
+            if not isinstance(self.current_dataset, dict):
+                raise ValueError("Invalid dataset")
+
+            # Many list endpoints return only id/filename/etc.
+            # If summary_json isn't present, fetch it from backend.
+            summary = self.current_dataset.get("summary_json")
+            dataset_id = self.current_dataset.get("id")
+            if (not isinstance(summary, dict)) and dataset_id and self.api_client is not None:
+                health = self.api_client.get_dataset_health(dataset_id)
+                summary = (health.get("summary_json") or health.get("summary") or {})
+                if isinstance(summary, dict):
+                    self.current_dataset["summary_json"] = summary
+
+            summary = self.current_dataset.get("summary_json") or {}
+            cols = summary.get("numeric_columns")
+            if not cols:
+                av = summary.get("averages") or {}
+                if isinstance(av, dict):
+                    cols = list(av.keys())
+            if not cols:
+                raise ValueError("No numeric columns available")
+
+            self.x_axis_combo.clear()
+            self.y_axis_combo.clear()
+            self.x_axis_combo.addItems(cols)
+            self.y_axis_combo.addItems(cols)
+            self.set_controls_enabled(True)
+            
+            # Start analytics fetch (chart will update after data loads)
+            self._start_analytics()
+            
+        except Exception as e:
+            self.set_controls_enabled(False)
+            QMessageBox.critical(self, "No Data", f"Dataset not loaded: {str(e)}")
+
+    def set_controls_enabled(self, enabled: bool):
+        """Enable or disable all controls"""
+        self.viz_type_combo.setEnabled(enabled)
+        self.x_axis_combo.setEnabled(enabled)
+        self.y_axis_combo.setEnabled(enabled)
+        self.update_btn.setEnabled(enabled)
+        self.clear_btn.setEnabled(enabled)
+        self.export_btn.setEnabled(enabled)
+        if hasattr(self, 'canvas'):
+            self.canvas.current_palette = self.current_palette
+
+    def _start_analytics(self):
+        """Start fetching analytics data in background thread"""
+        dataset_id = self.current_dataset.get('id') if isinstance(self.current_dataset, dict) else None
+        if not dataset_id or self.api_client is None:
+            self._render_analytics_error('No dataset id or API client')
+            return
+        
+        self._render_analytics_loading()
+        if self.analytics_thread is not None and self.analytics_thread.isRunning():
+            try:
+                self.analytics_thread.terminate()
+            except Exception:
+                pass
+        
+        self.analytics_thread = AnalyticsFetchThread(self.api_client, dataset_id, limit=500, offset=0, parent=self)
+        self.analytics_thread.loaded.connect(self._on_analytics_loaded)
+        self.analytics_thread.start()
+
+    def _render_analytics_loading(self):
+        """Show loading state for analytics"""
+        self.insights_label.setText('Loading analytics...')
+        self.insights_label.setTextFormat(Qt.PlainText)
+        self.insights_label.setStyleSheet("font-size: 11px; color: #374151; padding: 4px;")
+        self._clear_grid(self.summary_grid)
+        self._clear_grid(self.outliers_grid)
+
+    def _render_analytics_error(self, message):
+        """Show error state for analytics"""
+        self.insights_label.setText(f'Analytics unavailable: {message}')
+        self.insights_label.setTextFormat(Qt.PlainText)
+        self.insights_label.setStyleSheet("font-size: 11px; color: #dc2626; padding: 4px;")
+        self._clear_grid(self.summary_grid)
+        self._clear_grid(self.outliers_grid)
+
+    def _clear_grid(self, grid):
+        """Clear all widgets from a grid layout"""
+        while grid.count():
+            item = grid.takeAt(0)
+            w = item.widget()
+            if w is not None:
+                w.setParent(None)
+
+    def _to_float(self, v):
+        """Convert value to float, handling various input types"""
+        if isinstance(v, (int, float)):
+            return float(v) if np.isfinite(v) else None
+        if isinstance(v, str):
+            s = v.strip()
+            if not s or s.lower() in ['nan', 'null', 'none', '']:
+                return None
+            try:
+                n = float(s)
+                return n if np.isfinite(n) else None
+            except (ValueError, TypeError):
+                return None
+        return None
+
+    def _quartiles(self, vals):
+        """Calculate quartiles from a list of values"""
+        v = [x for x in vals if isinstance(x, (int, float)) and np.isfinite(x)]
+        if not v:
+            return {'min': 0.0, 'q1': 0.0, 'q2': 0.0, 'q3': 0.0, 'max': 0.0}
+        v.sort()
+        arr = np.array(v, dtype=float)
+        q1 = float(np.percentile(arr, 25, method='linear'))
+        q2 = float(np.percentile(arr, 50, method='linear'))
+        q3 = float(np.percentile(arr, 75, method='linear'))
+        return {'min': float(arr[0]), 'q1': q1, 'q2': q2, 'q3': q3, 'max': float(arr[-1])}
+
+    def _on_analytics_loaded(self, payload):
+        """Process loaded analytics data"""
+        err = payload.get('error')
+        if err:
+            self._render_analytics_error(err)
+            return
+        
+        rows_resp = payload.get('rows') or {}
+        rows = rows_resp.get('rows') or []
+        self._analytics_rows = rows
+        
+        summary = (self.current_dataset or {}).get('summary_json') or {}
+        numeric_cols = summary.get('numeric_columns') or []
+        if not numeric_cols and rows:
+            keys = list(rows[0].keys())
+            id_like = {'Record', 'record', 'id', 'ID', 'index', 'Index'}
+            for k in keys:
+                if k in id_like:
+                    continue
+                if any(self._to_float(r.get(k)) is not None for r in rows):
+                    numeric_cols.append(k)
+        
+        stats_map = self._compute_stats(rows, numeric_cols, payload.get('quality'))
+        corr = self._compute_corr(rows, numeric_cols)
+        outliers_by_col = self._compute_outliers(rows, numeric_cols)
+        insights = self._build_insights(rows, numeric_cols, stats_map, corr, outliers_by_col)
+        
+        self._render_summary(stats_map)
+        self._render_outliers(outliers_by_col)
+        
+        if insights:
+            html = '<div style="padding: 4px;">'
+            html += '<ul style="margin: 0; padding-left: 18px; line-height: 1.8;">'
+            html += ''.join([f'<li style="margin-bottom: 4px; color: #111827; font-size: 11px; font-weight: 500;">{self._escape_html(t)}</li>' for t in insights])
+            html += '</ul></div>'
+            self.insights_label.setTextFormat(Qt.RichText)
+            self.insights_label.setText(html)
+            self.insights_label.setStyleSheet("font-size: 11px; color: #111827;")
+        else:
+            self.insights_label.setTextFormat(Qt.PlainText)
+            self.insights_label.setText('No significant insights detected.')
+            self.insights_label.setStyleSheet("font-size: 11px; color: #6b7280; padding: 4px;")
+        
+        # Auto-update chart with real data now that analytics are loaded
+        self.update_chart()
+
+    def _compute_stats(self, rows, numeric_cols, quality_payload=None):
+        """Compute summary statistics for numeric columns"""
+        missing_map = None
+        if isinstance(quality_payload, dict):
+            qm = quality_payload.get('quality_metrics')
+            if isinstance(qm, dict):
+                missing_map = qm.get('missing_values')
+        
+        total = len(rows) if rows else 0
+        out = {}
+        for col in numeric_cols:
+            vals = []
+            for r in rows:
+                f = self._to_float(r.get(col))
+                if f is not None:
+                    vals.append(f)
+            q = self._quartiles(vals)
+            mean_v = float(np.mean(vals)) if vals else 0.0
+            std_v = float(np.std(vals, ddof=1)) if len(vals) > 1 else 0.0
+            missing = max(0, total - len(vals))
+            if isinstance(missing_map, dict) and isinstance(missing_map.get(col), int):
+                missing = missing_map.get(col)
+            out[col] = {
+                'mean': mean_v,
+                'median': q['q2'],
+                'min': q['min'],
+                'max': q['max'],
+                'std': std_v,
+                'n': max(0, total - missing) if total else len(vals),
+                'missing': missing,
+                'total': total,
+            }
+        return out
+
+    def _compute_corr(self, rows, numeric_cols):
+        """Compute correlation matrix for numeric columns"""
+        if not rows or len(numeric_cols) < 2:
+            return {'order': numeric_cols, 'matrix': []}
+        data = []
+        for r in rows:
+            row_vals = []
+            ok = True
+            for c in numeric_cols:
+                f = self._to_float(r.get(c))
+                if f is None:
+                    ok = False
+                    break
+                row_vals.append(f)
+            if ok:
+                data.append(row_vals)
+        if len(data) < 2:
+            return {'order': numeric_cols, 'matrix': []}
+        arr = np.array(data, dtype=float)
+        corr = np.corrcoef(arr, rowvar=False)
+        return {'order': numeric_cols, 'matrix': corr.tolist()}
+
+    def _compute_outliers(self, rows, numeric_cols):
+        """Detect outliers using IQR method"""
+        out = {}
+        for col in numeric_cols:
+            vals = []
+            for r in rows:
+                f = self._to_float(r.get(col))
+                if f is not None:
+                    vals.append(f)
+            if len(vals) < 4:
+                out[col] = {'lb': 0.0, 'ub': 0.0, 'values': []}
+                continue
+            q = self._quartiles(vals)
+            iqr = q['q3'] - q['q1']
+            lb = q['q1'] - 1.5 * iqr
+            ub = q['q3'] + 1.5 * iqr
+            ovals = [v for v in vals if v < lb or v > ub]
+            ovals.sort(key=lambda v: max(abs(v - lb), abs(v - ub)), reverse=True)
+            out[col] = {'lb': lb, 'ub': ub, 'values': ovals[:8], 'count': len(ovals)}
+        return out
+
+    def _build_insights(self, rows, numeric_cols, stats_map, corr, outliers_by_col):
+        """Generate automatic insights from data analysis"""
+        items = []
+        if not numeric_cols:
+            return items
+        
+        cols = [c for c in numeric_cols if c in stats_map]
+        if cols:
+            max_var = max(cols, key=lambda c: stats_map[c].get('std') or 0.0)
+            max_mean = max(cols, key=lambda c: stats_map[c].get('mean') or 0.0)
+            if (stats_map[max_var].get('std') or 0.0) > 0:
+                items.append(f"Highest variability: {max_var} (std = {stats_map[max_var]['std']:.2f})")
+            if (stats_map[max_mean].get('mean') or 0.0) != 0:
+                items.append(f"Largest mean value: {max_mean} (mean = {stats_map[max_mean]['mean']:.2f})")
+            
+            cv_cols = [c for c in cols if abs(stats_map[c].get('mean') or 0.0) > 1e-9]
+            if cv_cols:
+                cv = {c: abs((stats_map[c].get('std') or 0.0) / (stats_map[c].get('mean') or 1.0)) for c in cv_cols}
+                hi = max(cv_cols, key=lambda c: cv[c])
+                lo = min(cv_cols, key=lambda c: cv[c])
+                items.append(f"Most volatile by CV: {hi} (CV = {cv[hi]:.2f})")
+                items.append(f"Most stable by CV: {lo} (CV = {cv[lo]:.2f})")
+        
+        # Skewness
+        skew_map = {}
+        for c in numeric_cols:
+            vals = [self._to_float(r.get(c)) for r in rows]
+            vals = [x for x in vals if x is not None]
+            if len(vals) >= 3:
+                try:
+                    skew_map[c] = float(stats.skew(vals, bias=False))
+                except Exception:
+                    skew_map[c] = 0.0
+        if skew_map:
+            top = max(skew_map.keys(), key=lambda c: abs(skew_map[c]))
+            if abs(skew_map[top]) > 0.5:
+                items.append(f"Most skewed: {top} (skew = {skew_map[top]:.2f})")
+        
+        # Correlations
+        if corr.get('matrix') and corr.get('order') and len(corr['order']) > 1:
+            order = corr['order']
+            m = corr['matrix']
+            best_pos = (0, 1, float(m[0][1]))
+            best_neg = (0, 1, float(m[0][1]))
+            for i in range(len(order)):
+                for j in range(i + 1, len(order)):
+                    r = float(m[i][j])
+                    if r > best_pos[2]:
+                        best_pos = (i, j, r)
+                    if r < best_neg[2]:
+                        best_neg = (i, j, r)
+            if best_pos[2] > 0:
+                items.append(f"Top positive correlation: {order[best_pos[0]]} vs {order[best_pos[1]]} (r={best_pos[2]:.2f})")
+            if best_neg[2] < 0:
+                items.append(f"Top negative correlation: {order[best_neg[0]]} vs {order[best_neg[1]]} (r={best_neg[2]:.2f})")
+        
+        # Outliers
+        top_out = None
+        for c, meta in outliers_by_col.items():
+            cnt = int(meta.get('count') or 0)
+            if top_out is None or cnt > top_out[1]:
+                top_out = (c, cnt)
+        if top_out and top_out[1] > 0:
+            pct = (top_out[1] / max(1, len(rows))) * 100
+            items.append(f"Outlier-heavy: {top_out[0]} ({top_out[1]} points, {pct:.1f}% of rows)")
+        
+        return items
+
+    def _escape_html(self, s):
+        """Escape HTML special characters"""
+        return (str(s)
+                .replace('&', '&amp;')
+                .replace('<', '&lt;')
+                .replace('>', '&gt;')
+                .replace('"', '&quot;')
+                .replace("'", '&#039;'))
+
+    def _stat_card(self, col, s):
+        """Create a statistics card widget"""
+        card = QFrame()
+        card.setStyleSheet("""
+            QFrame { 
+                background-color: #ffffff; 
+                border: 1px solid #e5e7eb; 
+                border-radius: 8px;
+            }
+        """)
+        l = QVBoxLayout(card)
+        l.setContentsMargins(8, 8, 8, 8)
+        l.setSpacing(4)
+        
+        name = QLabel(col)
+        name.setStyleSheet("font-size: 11px; font-weight: 700; color: #1f2937;")
+        name.setWordWrap(True)
+        l.addWidget(name)
+        
+        grid = QGridLayout()
+        grid.setHorizontalSpacing(8)
+        grid.setVerticalSpacing(3)
+        grid.setContentsMargins(0, 2, 0, 0)
+        l.addLayout(grid)
+        
+        def cell(r, c, label, value):
+            w = QWidget()
+            box = QVBoxLayout(w)
+            box.setContentsMargins(0, 0, 0, 0)
+            box.setSpacing(1)
+            a = QLabel(label)
+            a.setStyleSheet("font-size: 9px; color: #6b7280;")
+            b = QLabel(value)
+            b.setStyleSheet("font-size: 11px; font-weight: 700; color: #111827;")
+            box.addWidget(a)
+            box.addWidget(b)
+            grid.addWidget(w, r, c)
+        
+        cell(0, 0, 'Mean', f"{s['mean']:.2f}")
+        cell(0, 1, 'Median', f"{s['median']:.2f}")
+        cell(1, 0, 'Min', f"{s['min']:.2f}")
+        cell(1, 1, 'Max', f"{s['max']:.2f}")
+        cell(2, 0, 'Std', f"{s['std']:.2f}")
+        cell(2, 1, 'N', f"{int(s['n'])}")
+        
+        if s['missing'] > 0:
+            missing_label = QLabel(f"Missing: {int(s['missing'])}")
+            missing_label.setStyleSheet("font-size: 9px; color: #6b7280; margin-top: 2px;")
+            l.addWidget(missing_label)
+        
+        return card
+
+    def _render_summary(self, stats_map):
+        """Render summary statistics in the analytics panel"""
+        self._clear_grid(self.summary_grid)
+        cols = list(stats_map.keys())
+        for i, c in enumerate(cols[:6]):
+            card = self._stat_card(c, stats_map[c])
+            self.summary_grid.addWidget(card, i // 2, i % 2)
+
+    def _outlier_card(self, col, meta):
+        """Create an outlier information card widget"""
+        card = QFrame()
+        card.setStyleSheet("""
+            QFrame { 
+                background-color: #ffffff; 
+                border: 1px solid #e5e7eb; 
+                border-radius: 8px;
+            }
+        """)
+        l = QVBoxLayout(card)
+        l.setContentsMargins(8, 8, 8, 8)
+        l.setSpacing(4)
+        
+        row = QHBoxLayout()
+        row.setSpacing(4)
+        name = QLabel(col)
+        name.setStyleSheet("font-size: 11px; font-weight: 700; color: #111827;")
+        name.setWordWrap(True)
+        row.addWidget(name)
+        row.addStretch()
+        
+        count = int(meta.get('count') or 0)
+        badge = QLabel(f"{count} outliers" if count != 1 else "1 outlier")
+        if count > 0:
+            badge.setStyleSheet("""
+                font-size: 9px; 
+                padding: 2px 6px; 
+                border-radius: 8px; 
+                background-color: #fef2f2; 
+                color: #dc2626; 
+                border: 1px solid #fecaca;
+                font-weight: 600;
+            """)
+        else:
+            badge.setStyleSheet("""
+                font-size: 9px; 
+                padding: 2px 6px; 
+                border-radius: 8px; 
+                background-color: #f0fdf4; 
+                color: #16a34a; 
+                border: 1px solid #bbf7d0;
+                font-weight: 600;
+            """)
+        row.addWidget(badge)
+        l.addLayout(row)
+        
+        bounds = QLabel(f"Bounds: [{float(meta.get('lb') or 0.0):.2f}, {float(meta.get('ub') or 0.0):.2f}]")
+        bounds.setStyleSheet("font-size: 9px; color: #6b7280;")
+        l.addWidget(bounds)
+        
+        vals = meta.get('values') or []
+        if not vals:
+            none = QLabel('None detected')
+            none.setStyleSheet("font-size: 10px; color: #6b7280;")
+            l.addWidget(none)
+        else:
+            # Show outlier value if only one, otherwise show range
+            if len(vals) == 1:
+                val_label = QLabel(f"Value: {float(vals[0]):.2f}")
+                val_label.setStyleSheet("font-size: 10px; color: #dc2626; font-weight: 600;")
+                l.addWidget(val_label)
+            else:
+                val_label = QLabel(f"Value: {float(vals[0]):.2f}")
+                val_label.setStyleSheet("font-size: 10px; color: #dc2626; font-weight: 600;")
+                l.addWidget(val_label)
+        
+        return card
+
+    def _render_outliers(self, outliers_by_col):
+        """Render outlier information in the analytics panel"""
+        self._clear_grid(self.outliers_grid)
+        cols = list(outliers_by_col.keys())
+        for i, c in enumerate(cols[:6]):
+            card = self._outlier_card(c, outliers_by_col[c])
+            self.outliers_grid.addWidget(card, i // 2, i % 2)
+
+    def _get_column_data(self, column_name, max_rows=None):
+        """Get actual data from analytics rows for a specific column"""
+        if not self._analytics_rows:
+            # Fallback to sample data if no analytics loaded
+            return self._sample(column_name, max_rows or 50)
+        
+        data = []
+        for row in self._analytics_rows:
+            val = self._to_float(row.get(column_name))
+            if val is not None:
+                data.append(val)
+        
+        if not data:
+            return self._sample(column_name, max_rows or 50)
+        
+        if max_rows and len(data) > max_rows:
+            # Evenly sample data points
+            step = len(data) / max_rows
+            data = [data[int(i * step)] for i in range(max_rows)]
+        
+        return np.array(data)
+
+    def _sample(self, column_name, n=50):
+        """Generate sample data for visualization when backend data is not available"""
+        if not self.current_dataset:
+            return np.random.normal(50, 15, n)
+        
+        summary = self.current_dataset.get("summary_json") or {}
+        averages = summary.get("averages") or {}
+        
+        if column_name in averages:
+            mean = averages[column_name]
+            std = 15
+            mins = summary.get("min") or {}
+            maxs = summary.get("max") or {}
+            if column_name in mins and column_name in maxs:
+                std = (maxs[column_name] - mins[column_name]) / 6
+            return np.clip(np.random.normal(mean, std, n), mins.get(column_name, mean-3*std), maxs.get(column_name, mean+3*std))
+        else:
+            return np.random.normal(50, 15, n)
+
+    def update_chart(self):
+        """Update the chart based on current selections"""
+        if not self.current_dataset:
+            QMessageBox.warning(self, "No Data", "Dataset not loaded")
+            return
+
+        try:
+            chart = self.viz_type_combo.currentData()
+            x = self.x_axis_combo.currentText()
+            y = self.y_axis_combo.currentText()
+
+            if chart in ["line", "scatter"]:
+                xd = self._get_column_data(x, 100)
+                yd = self._get_column_data(y, 100)
+                # Make sure both arrays are same length
+                min_len = min(len(xd), len(yd))
+                xd = xd[:min_len]
+                yd = yd[:min_len]
+                
+                if chart == "line":
+                    # Sort by x for proper line chart
+                    sorted_indices = np.argsort(xd)
+                    xd = xd[sorted_indices]
+                    yd = yd[sorted_indices]
+                    self.canvas.line_chart(xd, yd, f"{y} vs {x}", x, y)
+                else:
+                    self.canvas.scatter_plot(xd, yd, f"{y} vs {x}", x, y)
+
+            elif chart == "bar":
+                yd = self._get_column_data(y, 15)
+                labels = [f"Sample {i+1}" for i in range(len(yd))]
+                self.canvas.bar_chart(labels, yd, f"Bar Chart: {y}", "Samples", y)
+
+            elif chart == "hist":
+                yd = self._get_column_data(y, 500)
+                self.canvas.histogram(yd, f"Distribution of {y}", y)
+
+            elif chart == "box":
+                yd = self._get_column_data(y, 500)
+                self.canvas.box_plot(yd, f"Box Plot of {y}", y)
+
+            elif chart == "heatmap":
+                summary = (self.current_dataset.get("summary_json") or {})
+                cols = summary.get("numeric_columns")
+                if not cols:
+                    av = summary.get("averages") or {}
+                    cols = list(av.keys()) if isinstance(av, dict) else []
+                if not cols:
+                    raise ValueError("No numeric columns for heatmap")
+                
+                # Use actual data for correlation
+                data = []
+                for c in cols:
+                    col_data = self._get_column_data(c, 200)
+                    data.append(col_data)
+                
+                # Ensure all columns have same length
+                min_len = min(len(d) for d in data)
+                data = [d[:min_len] for d in data]
+                
+                arr = np.array(data).T
+                corr = np.corrcoef(arr, rowvar=False)
+                self.canvas.heatmap(corr, cols, "Correlation Heatmap")
+
+            elif chart == "donut":
+                # For donut chart, show distribution by creating bins/categories
+                yd = self._get_column_data(y, 500)
+                
+                # Create 5 bins from the data
+                min_val, max_val = np.min(yd), np.max(yd)
+                bins = 5
+                bin_edges = np.linspace(min_val, max_val, bins + 1)
+                
+                # Count values in each bin
+                counts, _ = np.histogram(yd, bins=bin_edges)
+                
+                # Create labels for each bin
+                labels = []
+                for i in range(bins):
+                    label = f"{bin_edges[i]:.1f}-{bin_edges[i+1]:.1f}"
+                    labels.append(label)
+                
+                # Filter out empty bins
+                non_zero = counts > 0
+                labels = [labels[i] for i in range(len(labels)) if non_zero[i]]
+                counts = counts[non_zero]
+                
+                if len(counts) == 0:
+                    raise ValueError(f"No data distribution found for {y}")
+                
+                self.canvas.donut_chart(labels, counts, f"Distribution of {y}")
+                
+        except Exception as e:
+            QMessageBox.critical(self, "Chart Error", f"Failed to generate chart: {str(e)}")
+            import traceback
+            traceback.print_exc()
+
+    def clear_chart(self):
+        """Clear the current chart"""
+        self.canvas.clear()
+
+    def export_chart(self):
+        """Export the current chart to a file"""
+        if not self.current_dataset:
+            QMessageBox.warning(self, "No Data", "Dataset not loaded")
+            return
+        
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Export Chart",
+            "chart.png",
+            "PNG Files (*.png);;PDF Files (*.pdf);;SVG Files (*.svg);;All Files (*)",
+        )
+        if not file_path:
+            return
+        try:
+            self.canvas.export_chart(file_path)
+            QMessageBox.information(self, "Success", f"Chart exported to {file_path}")
+        except Exception as e:
+            QMessageBox.critical(self, "Export Error", f"Failed to export chart: {str(e)}")
+
+    def generate_pdf_report(self):
+        """Generate comprehensive PDF report"""
+        if not self.current_dataset:
+            QMessageBox.warning(self, "No Data", "Please select a dataset first")
+            return
+        
+        # Show save dialog
+        dataset_name = self.current_dataset.get('name', f'dataset_{self.current_dataset.get("id", "unknown")}')
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Generate PDF Report",
+            f"{dataset_name}_report.pdf",
+            "PDF Files (*.pdf);;All Files (*)",
+        )
+        
+        if not file_path:
+            return
+        
+        try:
+            # Show progress dialog
+            progress = QProgressDialog("Generating PDF report...", "Cancel", 0, 100, self)
+            progress.setWindowTitle("PDF Report Generation")
+            progress.setWindowModality(Qt.WindowModal)
+            progress.show()
+            
+            # Create PDF document
+            doc = SimpleDocTemplate(file_path, pagesize=A4, rightMargin=72, leftMargin=72, topMargin=72, bottomMargin=18)
+            story = []
+            styles = getSampleStyleSheet()
+            
+            # Custom styles
+            title_style = ParagraphStyle(
+                'CustomTitle',
+                parent=styles['Heading1'],
+                fontSize=24,
+                spaceAfter=30,
+                alignment=TA_CENTER,
+                textColor=colors.HexColor('#1f2937')
+            )
+            
+            heading_style = ParagraphStyle(
+                'CustomHeading',
+                parent=styles['Heading2'],
+                fontSize=16,
+                spaceAfter=12,
+                spaceBefore=20,
+                textColor=colors.HexColor('#374151')
+            )
+            
+            # Title
+            progress.setValue(10)
+            story.append(Paragraph(f"Dataset Analysis Report", title_style))
+            story.append(Spacer(1, 12))
+            
+            # Dataset Information
+            self._add_dataset_info(story, styles, progress, dataset_name)
+            
+            # Summary Statistics
+            self._add_summary_stats(story, styles, progress)
+            
+            # Visualizations
+            self._add_charts(story, styles, progress)
+            
+            # Insights and Observations
+            self._add_insights(story, styles, progress)
+            
+            # Outlier Analysis
+            self._add_outliers(story, styles, progress)
+            
+            # Footer
+            progress.setValue(95)
+            story.append(PageBreak())
+            footer_style = ParagraphStyle(
+                'Footer',
+                parent=styles['Normal'],
+                fontSize=9,
+                textColor=colors.HexColor('#6b7280'),
+                alignment=TA_CENTER
+            )
+            story.append(Paragraph(f"Report generated on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", footer_style))
+            
+            # Build PDF
+            doc.build(story)
+            progress.setValue(100)
+            
+            QMessageBox.information(self, "Success", f"PDF report generated successfully:\n{file_path}")
+            
+        except Exception as e:
+            QMessageBox.critical(self, "Report Error", f"Failed to generate PDF report: {str(e)}")
+            import traceback
+            traceback.print_exc()
+        finally:
+            progress.close()
+
+    def _add_dataset_info(self, story, styles, progress, dataset_name):
+        """Add dataset information section to PDF"""
+        heading_style = ParagraphStyle(
+            'CustomHeading',
+            parent=styles['Heading2'],
+            fontSize=16,
+            spaceAfter=12,
+            spaceBefore=20,
+            textColor=colors.HexColor('#374151')
+        )
+        
+        story.append(Paragraph("Dataset Information", heading_style))
+        
+        # Dataset info table
+        data = [
+            ['Name', dataset_name],
+            ['Upload Date', self.current_dataset.get('uploaded_at', 'N/A')],
+            ['File Size', f"{self.current_dataset.get('file_size', 0):,} bytes"],
+            ['Rows', str(self.current_dataset.get('row_count', 'N/A'))],
+            ['Columns', str(self.current_dataset.get('column_count', 'N/A'))],
+        ]
+        
+        table = Table(data, colWidths=[2*inch, 3*inch])
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (0, -1), colors.HexColor('#f3f4f6')),
+            ('TEXTCOLOR', (0, 0), (-1, -1), colors.black),
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+            ('FONTNAME', (1, 0), (1, -1), 'Helvetica'),
+            ('FONTSIZE', (0, 0), (-1, -1), 10),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+            ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#ffffff')),
+            ('GRID', (0, 0), (-1, -1), 1, colors.HexColor('#e5e7eb')),
+        ]))
+        
+        story.append(table)
+        story.append(Spacer(1, 20))
+        progress.setValue(20)
+    
+    def _add_summary_stats(self, story, styles, progress):
+        """Add summary statistics section to PDF"""
+        heading_style = ParagraphStyle(
+            'CustomHeading',
+            parent=styles['Heading2'],
+            fontSize=16,
+            spaceAfter=12,
+            spaceBefore=20,
+            textColor=colors.HexColor('#374151')
+        )
+        
+        story.append(Paragraph("Summary Statistics", heading_style))
+        
+        # Get stats from analytics
+        if hasattr(self, '_analytics_rows') and self._analytics_rows:
+            stats_map = self._compute_stats(self._analytics_rows, self._get_numeric_columns())
+            
+            if stats_map:
+                # Create stats table
+                headers = ['Column', 'Mean', 'Median', 'Std Dev', 'Min', 'Max', 'Count']
+                data = [headers]
+                
+                for col, stats in list(stats_map.items())[:10]:  # Limit to 10 columns
+                    row = [
+                        col,
+                        f"{stats['mean']:.2f}",
+                        f"{stats['median']:.2f}",
+                        f"{stats['std']:.2f}",
+                        f"{stats['min']:.2f}",
+                        f"{stats['max']:.2f}",
+                        f"{int(stats['n'])}"
+                    ]
+                    data.append(row)
+                
+                table = Table(data, colWidths=[1.5*inch] + [0.8*inch]*6)
+                table.setStyle(TableStyle([
+                    ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#f3f4f6')),
+                    ('TEXTCOLOR', (0, 0), (-1, -1), colors.black),
+                    ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                    ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                    ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+                    ('FONTSIZE', (0, 0), (-1, -1), 9),
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+                    ('BACKGROUND', (0, 1), (-1, -1), colors.HexColor('#ffffff')),
+                    ('GRID', (0, 0), (-1, -1), 1, colors.HexColor('#e5e7eb')),
+                ]))
+                
+                story.append(table)
+                story.append(Spacer(1, 20))
+        
+        progress.setValue(40)
+    
+    def _add_charts(self, story, styles, progress):
+        """Add charts section to PDF"""
+        heading_style = ParagraphStyle(
+            'CustomHeading',
+            parent=styles['Heading2'],
+            fontSize=16,
+            spaceAfter=12,
+            spaceBefore=20,
+            textColor=colors.HexColor('#374151')
+        )
+        
+        story.append(Paragraph("Visualizations", heading_style))
+        
+        # Add current chart if available
+        if hasattr(self, 'canvas') and self.canvas:
+            try:
+                # Save current chart to temporary file
+                import tempfile
+                tmp_file = tempfile.NamedTemporaryFile(suffix='.png', delete=False)
+                tmp_file.close()
+                
+                self.canvas.fig.savefig(tmp_file.name, dpi=150, bbox_inches='tight')
+                
+                # Add to PDF
+                img = Image(tmp_file.name, width=5*inch, height=3.5*inch)
+                story.append(img)
+                story.append(Spacer(1, 12))
+                
+                # Clean up
+                try:
+                    os.unlink(tmp_file.name)
+                except:
+                    pass  # File might be locked, will be cleaned up later
+            except Exception as e:
+                print(f"Error saving chart: {e}")
+        
+        progress.setValue(60)
+    
+    def _add_insights(self, story, styles, progress):
+        """Add insights section to PDF"""
+        heading_style = ParagraphStyle(
+            'CustomHeading',
+            parent=styles['Heading2'],
+            fontSize=16,
+            spaceAfter=12,
+            spaceBefore=20,
+            textColor=colors.HexColor('#374151')
+        )
+        
+        normal_style = ParagraphStyle(
+            'CustomNormal',
+            parent=styles['Normal'],
+            fontSize=11,
+            spaceAfter=8,
+            textColor=colors.HexColor('#374151')
+        )
+        
+        story.append(Paragraph("Insights and Observations", heading_style))
+        
+        # Get insights from analytics
+        if hasattr(self, '_analytics_rows') and self._analytics_rows:
+            numeric_cols = self._get_numeric_columns()
+            stats_map = self._compute_stats(self._analytics_rows, numeric_cols)
+            corr = self._compute_corr(self._analytics_rows, numeric_cols)
+            outliers_by_col = self._compute_outliers(self._analytics_rows, numeric_cols)
+            insights = self._build_insights(self._analytics_rows, numeric_cols, stats_map, corr, outliers_by_col)
+            
+            if insights:
+                for insight in insights[:10]:  # Limit to 10 insights
+                    story.append(Paragraph(f"• {insight}", normal_style))
+            else:
+                story.append(Paragraph("No significant insights detected.", normal_style))
+        else:
+            story.append(Paragraph("Insights not available.", normal_style))
+        
+        story.append(Spacer(1, 20))
+        progress.setValue(80)
+    
+    def _add_outliers(self, story, styles, progress):
+        """Add outliers section to PDF"""
+        heading_style = ParagraphStyle(
+            'CustomHeading',
+            parent=styles['Heading2'],
+            fontSize=16,
+            spaceAfter=12,
+            spaceBefore=20,
+            textColor=colors.HexColor('#374151')
+        )
+        
+        story.append(Paragraph("Outlier Analysis", heading_style))
+        
+        # Get outliers from analytics
+        if hasattr(self, '_analytics_rows') and self._analytics_rows:
+            numeric_cols = self._get_numeric_columns()
+            outliers_by_col = self._compute_outliers(self._analytics_rows, numeric_cols)
+            
+            if outliers_by_col:
+                # Create outliers table
+                headers = ['Column', 'Outlier Count', 'Range', 'Sample Values']
+                data = [headers]
+                
+                for col, meta in list(outliers_by_col.items())[:10]:  # Limit to 10 columns
+                    count = int(meta.get('count') or 0)
+                    lb = float(meta.get('lb') or 0.0)
+                    ub = float(meta.get('ub') or 0.0)
+                    vals = meta.get('values', [])[:3]  # Show first 3 values
+                    
+                    sample_vals = ', '.join([f"{float(v):.2f}" for v in vals]) if vals else 'None'
+                    
+                    row = [
+                        col,
+                        str(count),
+                        f"[{lb:.2f}, {ub:.2f}]",
+                        sample_vals
+                    ]
+                    data.append(row)
+                
+                table = Table(data, colWidths=[1.2*inch, 1*inch, 1.2*inch, 1.6*inch])
+                table.setStyle(TableStyle([
+                    ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#f3f4f6')),
+                    ('TEXTCOLOR', (0, 0), (-1, -1), colors.black),
+                    ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                    ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                    ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+                    ('FONTSIZE', (0, 0), (-1, -1), 9),
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+                    ('BACKGROUND', (0, 1), (-1, -1), colors.HexColor('#ffffff')),
+                    ('GRID', (0, 0), (-1, -1), 1, colors.HexColor('#e5e7eb')),
+                ]))
+                
+                story.append(table)
+            else:
+                normal_style = ParagraphStyle(
+                    'CustomNormal',
+                    parent=styles['Normal'],
+                    fontSize=11,
+                    textColor=colors.HexColor('#374151')
+                )
+                story.append(Paragraph("No outliers detected.", normal_style))
+        
+        progress.setValue(90)
+    
+    def _get_numeric_columns(self):
+        """Get list of numeric columns from current dataset"""
+        if not self.current_dataset:
+            return []
+        
+        summary = self.current_dataset.get('summary_json', {})
+        numeric_cols = summary.get('numeric_columns', [])
+        
+        if not numeric_cols:
+            # Fallback to averages keys
+            averages = summary.get('averages', {})
+            if isinstance(averages, dict):
+                numeric_cols = list(averages.keys())
+        
+        return numeric_cols

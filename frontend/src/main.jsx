@@ -9,11 +9,12 @@ import SignIn from './pages/SignIn'
 import SignUp from './pages/SignUp'
 
 function RequireAuth({ children }){
-  const token = (()=>{ try { return localStorage.getItem('auth_token') } catch { return null } })()
-  const sessionAuthed = (()=>{ try { return sessionStorage.getItem('session_authed') } catch { return null } })()
-  if(!token || !sessionAuthed){
-    return <Navigate to="/signin" replace />
-  }
+  // TEMPORARY BYPASS: Always allow access without authentication
+  // const token = (()=>{ try { return localStorage.getItem('auth_token') } catch { return null } })()
+  // const sessionAuthed = (()=>{ try { return sessionStorage.getItem('session_authed') } catch { return null } })()
+  // if(!token || !sessionAuthed){
+  //   return <Navigate to="/signin" replace />
+  // }
   return children
 }
 

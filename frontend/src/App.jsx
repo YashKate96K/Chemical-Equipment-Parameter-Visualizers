@@ -22,7 +22,7 @@ function App() {
     } catch {}
   }, []);
 
-  const isAuthed = !!localStorage.getItem("auth_token");
+  const isAuthed = true; // TEMPORARY BYPASS: Always consider authenticated
   const onSignOut = () => {
     clearAuthToken();
     try { sessionStorage.removeItem('session_authed') } catch {}
@@ -31,7 +31,8 @@ function App() {
   };
 
   useEffect(() => {
-    if (!isAuthed) window.location.replace("/signin");
+    // TEMPORARY BYPASS: Don't redirect to signin
+    // if (!isAuthed) window.location.replace("/signin");
   }, [isAuthed]);
 
   return (

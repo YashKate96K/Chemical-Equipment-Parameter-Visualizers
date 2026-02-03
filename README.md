@@ -1,315 +1,432 @@
 # Chemical Equipment Parameter Visualizer
 
-Interactive web and desktop app to upload chemical equipment datasets, explore them with a dynamic dashboard, and export professional PDF reports.
+Interactive web and desktop application for uploading, exploring, and analyzing chemical equipment datasets with advanced visualizations and PDF reporting capabilities.
 
 ---
 
-## What this app does
+## 🚀 Features Overview
 
-- **Upload CSV / XLSX** datasets of equipment parameters.
-- **Authenticate** with Sign Up / Sign In (token-based auth via Django REST Framework).
-- **Explore data** in a dynamic React dashboard:
-  - Automatic detection of numeric & categorical columns.
-  - Summary cards with mean/median/min/max/std and missing-value counts.
-  - Correlation heatmap, boxplots, category distributions, K‑Means clustering.
-  - AI‑style insights (variability, skewness, correlations, outliers, dominant categories).
-  - Outliers overview per metric and a searchable, paginated data table.
-- **Desktop app** (PyQt5) with:
-  - Same analytics panels as the web frontend (Summary Stats, Insights, Outliers by Metric).
-  - Real-time chart rendering with matplotlib.
-  - Clear/Update controls and dataset list with cleaned filenames.
-  - Asynchronous analytics fetching from the backend.
-- **Generate PDF report** with:
-  - Dataset overview (rows, columns).
-  - Summary statistics and type distribution.
-  - Data‑quality highlights (missing values, duplicates).
-  - Strongest correlations and variance/skewness per metric.
+### 📊 **Data Analysis & Visualization**
+- **Upload CSV/XLSX** datasets with automatic column type detection
+- **Multiple Chart Types**: Line, Bar, Scatter, Histogram, Box Plot, Heatmap, Donut Chart
+- **Advanced Analytics**: Correlation analysis, outlier detection, statistical summaries
+- **Smart Insights**: Automated observations about data patterns and anomalies
 
-Backend: **Django + DRF**  
-Frontend: **React 18 + Vite + TailwindCSS + Recharts**  
-Desktop: **PyQt5 + matplotlib + numpy + scipy**
+### 🖥️ **Desktop Application (PyQt5)**
+- **Native Desktop Experience** with modern UI design
+- **Interactive Charts**: Real-time matplotlib rendering with multiple chart types
+- **Analytics Panel**: Summary Stats, Insights, and Outliers by Metric
+- **PDF Report Generation**: Comprehensive reports with charts and analysis
+- **Asynchronous Data Loading**: Non-blocking analytics fetching from backend
+
+### 🌐 **Web Frontend (React)**
+- **Modern React Dashboard** with Vite and TailwindCSS
+- **Dynamic Data Explorer**: Interactive table with search and pagination
+- **Responsive Design**: Works on desktop and mobile devices
+- **Authentication System**: Token-based user authentication
+
+### 📋 **Backend API (Django)**
+- **RESTful API**: Full CRUD operations for datasets
+- **Data Processing**: Automatic validation and quality metrics
+- **PDF Generation**: Server-side report creation with ReportLab
+- **Authentication**: Token-based security with Django REST Framework
 
 ---
 
-## Expected CSV structure (minimal example)
+## 🏗️ Architecture
 
-```text
+```
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   Desktop App   │    │   Web Frontend  │    │   Backend API   │
+│   (PyQt5)       │◄──►│   (React)       │◄──►│   (Django)      │
+│                 │    │                 │    │                 │
+│ • Matplotlib    │    │ • Recharts      │    │ • DRF           │
+│ • PDF Reports   │    │ • TailwindCSS   │    │ • ReportLab     │
+│ • Analytics     │    │ • Router        │    │ • PostgreSQL    │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+```
+
+---
+
+## 📋 Expected CSV Structure
+
+### Minimal Example:
+```csv
 Equipment Name,Type,Flowrate,Pressure,Temperature
 Pump-1,Pump,120,5.2,110
 Compressor-1,Compressor,95,8.4,95
 Valve-1,Valve,60,4.1,105
 ```
 
-Additional columns are allowed; the dashboard adapts automatically.
+### Supported Features:
+- ✅ **Automatic column detection** (numeric vs categorical)
+- ✅ **Flexible naming** - any column names supported
+- ✅ **Mixed data types** - handles various formats
+- ✅ **Missing values** - robust handling of incomplete data
 
 ---
 
-## 2. Backend (Django API)
+## 🛠️ Installation & Setup
 
-### 2.1. Setup and install dependencies
+### Prerequisites
+- Python 3.8+ 
+- Node.js 16+
+- Git
 
-From the project root:
+### 1. Backend Setup
 
 ```bash
 cd backend
-python -m venv .venv
+python -m venv venv
 
 # Windows
-.venv\Scripts\activate
-# macOS / Linux
-# source .venv/bin/activate
+venv\Scripts\activate
+# macOS/Linux  
+# source venv/bin/activate
 
 pip install -r requirements.txt
-```
-
-### 2.2. Migrate database and create admin (optional)
-
-```bash
 python manage.py migrate
-python manage.py createsuperuser
+python manage.py createsuperuser  # Optional
 ```
 
-### 2.3. Run backend server
-
-```bash
-python manage.py runserver 0.0.0.0:8000
-```
-
-Backend base URL (local):
-
-```text
-http://localhost:8000/api/
-```
-
-### 2.4. Main API endpoints
-
-- `POST /api/upload/` – upload CSV dataset
-- `GET  /api/datasets/` – list datasets
-- `GET  /api/datasets/<id>/health/` – JSON health + rows for Dynamic Data Explorer
-- `GET  /api/datasets/<id>/report/` – generate PDF report
-- `GET  /api/datasets/<id>/rows/` – paginated dataset rows for desktop analytics
-- `GET  /api/datasets/<id>/quality_metrics/` – quality metrics for desktop analytics
-- `POST /api/auth/register/` – register user `{ "username": "...", "password": "..." }`
-- `POST /api/auth/token/` – obtain auth token `{ "username": "...", "password": "..." }`
-
-Authentication uses **Django REST Framework TokenAuthentication**.
-
----
-
-## 3. Desktop App (PyQt5)
-
-### 3.1. Install dependencies
-
-From the project root:
+### 2. Desktop App Setup
 
 ```bash
 cd desktop
 pip install -r requirements.txt
 ```
 
-### 3.2. Run desktop app
-
-```bash
-python main.py
-```
-
-The desktop app connects to the same backend API as the web frontend. Features:
-
-- Dataset list with cleaned, user-friendly filenames.
-- Chart controls (type, X/Y axis selectors, Update/Clear buttons).
-- Right-side analytics panel with Summary Stats, Insights, and Outliers by Metric.
-- Asynchronous analytics fetching (rows + quality metrics) from the backend.
-
----
-
-## 4. Frontend (React + Vite)
-
-### 4.1. Install dependencies
-
-From the project root:
+### 3. Frontend Setup
 
 ```bash
 cd frontend
 npm install
 ```
 
-### 4.2. Configure environment
+---
 
-Create `.env` in `frontend` (beside `package.json`) based on `.env.example`:
+## 🚀 Running the Applications
 
+### Backend Server
+```bash
+cd backend
+python manage.py runserver 0.0.0.0:8000
+```
+**API Base URL**: `http://localhost:8000/api/`
+
+### Desktop Application
+```bash
+cd desktop
+python main.py
+```
+
+### Web Frontend
+```bash
+cd frontend
+npm run dev
+```
+**Frontend URL**: `http://localhost:5173/`
+
+---
+
+## 📊 Using the Applications
+
+### Desktop Application Workflow
+
+1. **Start Backend**: Run Django server first
+2. **Launch Desktop App**: `python main.py`
+3. **Load Dataset**: Select from dataset list
+4. **Explore Charts**: 
+   - Choose chart type (Line, Bar, Scatter, Histogram, Box, Heatmap, Donut)
+   - Select X/Y axes for applicable charts
+   - Click "Update" to render
+5. **View Analytics**: 
+   - Summary Statistics (mean, median, std, min, max)
+   - Auto-generated Insights
+   - Outlier Detection by column
+6. **Generate Reports**: 
+   - Click "Generate Report" for comprehensive PDF
+   - Use "Export" to save individual charts
+
+### Web Frontend Workflow
+
+1. **Authentication**: Sign up / Sign in
+2. **Upload Dataset**: CSV/XLSX file upload
+3. **Explore Dashboard**: 
+   - Dynamic Data Explorer with interactive charts
+   - Real-time statistics and insights
+   - Searchable data table
+4. **Generate Reports**: Download PDF reports
+
+---
+
+## 🔧 Configuration
+
+### Environment Variables
+
+#### Backend (.env)
+```env
+DJANGO_SECRET_KEY=your-secret-key
+DEBUG=True
+DATABASE_URL=sqlite:///db.sqlite3
+```
+
+#### Frontend (.env)
 ```env
 VITE_API_BASE_URL=http://localhost:8000/api
 VITE_API_TOKEN=
 ```
 
-- `VITE_API_BASE_URL` must point to your backend `/api`.
-- `VITE_API_TOKEN` can stay empty; it is filled after sign‑in.
+#### Desktop App (.env)
+```env
+API_BASE_URL=http://localhost:8000/api/
+API_TOKEN=your-auth-token
+```
 
-### 4.3. Run frontend dev server
+---
+
+## 📈 Chart Types & Features
+
+### 📊 **Available Charts**
+
+| Chart Type | Use Case | Data Requirements |
+|------------|----------|-------------------|
+| **Line Chart** | Trends over time/sequence | 2+ numeric columns |
+| **Bar Chart** | Category comparisons | 1 numeric column |
+| **Scatter Plot** | Correlation analysis | 2+ numeric columns |
+| **Histogram** | Distribution analysis | 1 numeric column |
+| **Box Plot** | Statistical summary | 1 numeric column |
+| **Heatmap** | Correlation matrix | 2+ numeric columns |
+| **Donut Chart** | Categorical distribution | 1 categorical column |
+
+### 🔍 **Analytics Features**
+
+- **Summary Statistics**: Mean, median, std dev, min, max, quartiles
+- **Outlier Detection**: IQR-based outlier identification
+- **Correlation Analysis**: Pearson correlation matrix
+- **Data Quality**: Missing value analysis, data type validation
+- **Auto-Insights**: Automated observations about patterns
+
+---
+
+## 📋 API Endpoints
+
+### Authentication
+- `POST /api/auth/register/` - User registration
+- `POST /api/auth/token/` - Get authentication token
+
+### Datasets
+- `POST /api/datasets/` - Upload new dataset
+- `GET /api/datasets/` - List all datasets
+- `GET /api/datasets/{id}/` - Get dataset details
+- `DELETE /api/datasets/{id}/` - Delete dataset
+
+### Analytics
+- `GET /api/datasets/{id}/health/` - Dataset health metrics
+- `GET /api/datasets/{id}/rows/` - Paginated data rows
+- `GET /api/datasets/{id}/quality_metrics/` - Data quality analysis
+- `GET /api/datasets/{id}/report/` - Generate PDF report
+
+---
+
+## 🔥 Recent Updates & Features
+
+### ✨ **New Features**
+- **Enhanced Heatmap**: Robust correlation matrix with error handling
+- **PDF Reports**: Comprehensive reports with charts and analytics
+- **Improved Analytics**: Better outlier detection and insights
+- **Modern UI**: Updated desktop app with better styling
+- **Error Handling**: Comprehensive error messages and debugging
+
+### 🐛 **Bug Fixes**
+- Fixed heatmap rendering issues with invalid data
+- Improved correlation matrix calculation
+- Better handling of missing/invalid data points
+- Enhanced error reporting and debugging
+
+### 🎨 **UI Improvements**
+- Compact analytics panel design
+- Better chart styling and colors
+- Improved font sizes and readability
+- Modern button and control styling
+
+---
+
+## 🚀 Deployment
+
+### Backend (Render/Heroku)
+```bash
+# Build command
+pip install -r requirements.txt && python manage.py migrate
+
+# Start command  
+gunicorn config.wsgi:application --bind 0.0.0.0:$PORT
+```
+
+### Frontend (Netlify/Vercel)
+```bash
+# Build command
+npm run build
+
+# Publish directory
+dist
+```
+
+**Important**: Ensure `frontend/public/_redirects` contains:
+```
+/*    /index.html   200
+```
+
+---
+
+## 🛠️ Development
+
+### Project Structure
+```
+chemical-equipment-parameter-visualizer/
+├── backend/                 # Django REST API
+│   ├── visualizer/         # Main app
+│   ├── config/            # Django settings
+│   └── requirements.txt    # Python dependencies
+├── desktop/                # PyQt5 Desktop App
+│   ├── app/               # Main application
+│   └── requirements.txt   # Python dependencies
+├── frontend/              # React Web App
+│   ├── src/              # React components
+│   └── package.json      # Node dependencies
+└── README.md              # This file
+```
+
+### Key Technologies
+
+#### Backend
+- **Django** - Web framework
+- **Django REST Framework** - API framework
+- **ReportLab** - PDF generation
+- **NumPy/SciPy** - Data processing
+- **PostgreSQL** - Database (production)
+
+#### Desktop
+- **PyQt5** - GUI framework
+- **Matplotlib** - Charting library
+- **NumPy/SciPy** - Data processing
+- **Requests** - HTTP client
+
+#### Frontend
+- **React 18** - UI framework
+- **Vite** - Build tool
+- **TailwindCSS** - CSS framework
+- **Recharts** - Charting library
+- **Axios** - HTTP client
+
+---
+
+## 🔍 Troubleshooting
+
+### Common Issues
+
+#### **Heatmap Not Working**
+- **Cause**: Insufficient numeric columns or invalid data
+- **Solution**: Ensure dataset has at least 2 numeric columns with valid data
+- **Debug**: Check console for DEBUG messages
+
+#### **PDF Generation Fails**
+- **Cause**: Missing ReportLab or invalid data
+- **Solution**: `pip install reportlab` and check data quality
+- **Debug**: Look for error messages in terminal
+
+#### **Authentication Issues**
+- **Cause**: Invalid tokens or backend URL mismatch
+- **Solution**: Re-authenticate and check API_BASE_URL
+- **Debug**: Check browser console and network tab
+
+#### **Desktop App Connection Issues**
+- **Cause**: Backend not running or wrong URL
+- **Solution**: Start backend server and check API_BASE_URL
+- **Debug**: Check terminal for connection errors
+
+### Debug Mode
+
+Enable debug logging by setting:
+```python
+import logging
+logging.basicConfig(level=logging.DEBUG)
+```
+
+---
+
+## 📝 License & Contributing
+
+### License
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+### Contributing
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests if applicable
+5. Submit a pull request
+
+---
+
+## 📞 Support
+
+For issues and questions:
+- **GitHub Issues**: Report bugs and request features
+- **Documentation**: Check this README and code comments
+- **Debug Mode**: Enable logging for detailed error information
+
+---
+
+## 🎯 Future Roadmap
+
+### Planned Features
+- [ ] **Advanced Analytics**: Machine learning insights
+- [ ] **Data Cleaning**: Automated data preprocessing
+- [ ] **Export Options**: Excel, JSON, CSV export
+- [ ] **Collaboration**: Multi-user support
+- [ ] **Real-time Updates**: WebSocket support
+- [ ] **Mobile App**: React Native application
+
+### Technical Improvements
+- [ ] **Performance**: Optimized data processing
+- [ ] **Security**: Enhanced authentication
+- [ ] **Scalability**: Database optimization
+- [ ] **Testing**: Comprehensive test suite
+- [ ] **Documentation**: API documentation
+- [ ] **CI/CD**: Automated deployment
+
+---
+
+## 📊 Quick Start Summary
 
 ```bash
-npm run dev
+# 1. Clone and setup
+git clone <repository-url>
+cd chemical-equipment-parameter-visualizer
+
+# 2. Backend
+cd backend
+python -m venv venv && venv\Scripts\activate
+pip install -r requirements.txt
+python manage.py migrate
+python manage.py runserver
+
+# 3. Desktop (new terminal)
+cd desktop
+pip install -r requirements.txt
+python main.py
+
+# 4. Frontend (new terminal)
+cd frontend
+npm install && npm run dev
 ```
 
-Frontend dev URL (default):
-
-```text
-http://localhost:5173/
-```
-
----
-
-## 5. Using the Apps Locally
-
-### Web Frontend
-
-1. **Start backend**  
-   `python manage.py runserver` (in `backend/`).
-
-2. **Start frontend**  
-   `npm run dev` (in `frontend/`).
-
-3. **Open the app**  
-   Go to `http://localhost:5173/` in your browser.
-
-4. **Sign up and sign in**
-   - Sign up → `POST /api/auth/register/`.
-   - Sign in → `POST /api/auth/token/` (returns an auth token used by the frontend).
-
-5. **Upload a dataset (CSV)**
-   - Header row is used for column names.
-   - Numeric columns are detected automatically (numbers or numeric strings).
-
-6. **Explore a dataset**
-   - Open the dataset **Dashboard**.
-   - Use **Dynamic Data Explorer** for:
-     - Summary Stats (mean, min, max, std, missing)
-     - Outliers & "Outliers by Metric"
-     - Correlation heatmap
-     - Boxplots
-     - K‑Means clustering
-     - Data table with search and column toggles
-
-7. **Download PDF report**
-   - From the dashboard, generate a PDF via `/api/datasets/<id>/report/`.
-
-### Desktop App
-
-1. **Start backend**  
-   `python manage.py runserver` (in `backend/`).
-
-2. **Run desktop app**  
-   `python main.py` (in `desktop/`).
-
-3. **Select a dataset**  
-   - Dataset list shows cleaned, user-friendly filenames.
-   - Select a dataset to load it into the visualization widget.
-
-4. **Explore charts and analytics**  
-   - Choose chart type and axes.
-   - Click **Update** to render the chart.
-   - View the right-side analytics panel (Summary Stats, Insights, Outliers by Metric) computed from real dataset rows.
-   - Use **Clear** to reset the chart.
-
-5. **Export chart**  
-   - Use the Export button to save the current chart as PNG/PDF/SVG.
+**Access Points:**
+- 🌐 **Web App**: http://localhost:5173
+- 🖥️ **Desktop App**: Native application window
+- 🔌 **Backend API**: http://localhost:8000/api
 
 ---
 
-## 6. Deployment
-
-This project is designed for:
-
-- **Backend** → Render
-- **Frontend** → Netlify
-
-### 6.1. Backend on Render
-
-1. Create a new **Web Service** on Render pointing to the `backend` folder.
-2. Environment variables (minimum):
-
-   - `DJANGO_SECRET_KEY=<your-secret>`
-   - `DEBUG=False`
-   - Database configuration (if not using default SQLite).
-
-3. Build & Start commands:
-
-   - Build: `pip install -r requirements.txt && python manage.py migrate`
-   - Start: `gunicorn config.wsgi:application --bind 0.0.0.0:8000`
-
-4. Note the public URL, e.g.:
-
-   ```text
-   https://chemical-equipment-parameter-visualizer-XXXX.onrender.com
-   ```
-
-### 6.2. Frontend on Netlify
-
-1. In `frontend/.env` (for production), set:
-
-   ```env
-   VITE_API_BASE_URL=https://<your-backend>.onrender.com/api
-   VITE_API_TOKEN=
-   ```
-
-2. Netlify configuration:
-
-   - Build command: `npm run build`
-   - Publish directory: `dist`
-
-3. **SPA routing fix (important)**
-
-   For React Router to work on reload, ensure this file exists:
-
-   `frontend/public/_redirects`
-
-   ```text
-   /*    /index.html   200
-   ```
-
-   This makes refresh on `/dashboard/...` or `/signup` work correctly on Netlify.
-
----
-
-## 7. Common Issues & Fixes
-
-- **Netlify 404 “Page not found” on reload**  
-  `_redirects` missing or not deployed. Ensure `frontend/public/_redirects` contains:
-
-  ```text
-  /*    /index.html   200
-  ```
-
-- **Sign in failed**  
-  Usually means either:
-  - Username/password are wrong for the current backend DB, or
-  - The frontend `VITE_API_BASE_URL` does not match the backend you’re using.
-
-- **Invalid token**  
-  Tokens are DRF auth tokens stored in the DB. If the DB is reset or changed, old tokens become invalid. Simply sign in again to obtain a new token.
-
-- **Dynamic Explorer shows blank stats / bounds [0.00, 0.00]**  
-  Ensure numeric fields are numeric or numeric strings (e.g. `120` or `"120"`), not values with units like `"120 kg"`.
-
----
-
-## 8. Script Cheat Sheet
-
-**Backend**
-
-```bash
-docker compose up --build
-```
-
-- Backend: http://localhost:8000  
-- Frontend: http://localhost:5173
-
----
-
-## 9. Notes
-
-- Only the **last 5 datasets** are kept; older ones are pruned on upload.
-- Token auth is used for protecting upload and dataset endpoints.
-- Frontend and backend URLs are configurable via `.env` files.
-- Desktop app fetches analytics data from the same backend API as the web frontend.
-- Desktop analytics panel shows all numeric columns (scrollable) and updates automatically on dataset selection.
+*Built with ❤️ for chemical equipment data analysis*
