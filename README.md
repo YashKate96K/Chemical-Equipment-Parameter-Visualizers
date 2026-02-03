@@ -345,9 +345,10 @@ python manage.py runserver
 
 # 3. Desktop (new terminal)
 cd desktop
+python -m venv venv
+venv\Scripts\activate
 pip install -r requirements.txt
 python main.py
-
 # 4. Frontend (new terminal)
 cd frontend
 npm install && npm run dev
