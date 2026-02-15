@@ -3,7 +3,7 @@
 Interactive web and desktop application for uploading, exploring, and analyzing chemical equipment datasets with advanced visualizations and PDF reporting capabilities.
 
 ---
-
+Demo Vedio : https://drive.google.com/file/d/1eX9c6aWn0Ekv824lv7U7b9UKQxRO2uF6/view?usp=sharing
 ## 🚀 Features Overview
 
 ### 📊 **Data Analysis & Visualization**
