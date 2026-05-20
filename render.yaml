@@ -2,6 +2,7 @@ services:
   - type: web
     name: chemical-visualizer-api
     env: python
+    runtime: "3.11"
     rootDir: backend
     plan: free
     buildCommand: |
